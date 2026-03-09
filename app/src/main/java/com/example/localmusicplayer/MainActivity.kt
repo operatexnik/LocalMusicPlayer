@@ -1,40 +1,70 @@
 package com.example.localmusicplayer
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.ContentUris
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ListView
+import android.widget.SeekBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-
-data class Track(val title: String, val uri: String)
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var btnPrev: Button
     private lateinit var btnNext: Button
     private lateinit var adapter: TrackAdapter
+    private lateinit var txtNowPlaying: TextView
+    private lateinit var txtProgress: TextView
+    private lateinit var seekBar: SeekBar
 
     private val tracks = mutableListOf<Track>()
+    private var currentTrackIndex = -1
 
-    private val trackChangedReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: Intent?) {
-            val index = intent?.getIntExtra(MusicService.EXTRA_CURRENT_INDEX, -1) ?: -1
-            currentTrackIndex = index
-            adapter.currentIndex = index
-            adapter.notifyDataSetChanged()
+    private val prefs by lazy { getSharedPreferences("player_prefs", MODE_PRIVATE) }
+
+    private val trackChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                MusicService.ACTION_TRACK_CHANGED -> {
+                    val index = intent.getIntExtra(MusicService.EXTRA_CURRENT_INDEX, -1)
+                    val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: "Nothing playing"
+                    val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
+                    val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
+
+                    currentTrackIndex = index
+                    adapter.currentIndex = index
+                    adapter.notifyDataSetChanged()
+
+                    txtNowPlaying.text = title
+                    txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
+                    seekBar.max = duration.toInt()
+                    seekBar.progress = position.toInt()
+                }
+
+                MusicService.ACTION_PROGRESS -> {
+                    val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: "Nothing playing"
+                    val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
+                    val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
+
+                    txtNowPlaying.text = title
+                    txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
+                    seekBar.max = duration.toInt()
+                    seekBar.progress = position.toInt()
+                }
+            }
         }
     }
-    private var currentTrackIndex = -1
-    private val prefs by lazy { getSharedPreferences("player_prefs", MODE_PRIVATE) }
 
     private val requestStoragePerm = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -60,23 +90,22 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Уведомления нужны для шторки на Android 13+
         if (Build.VERSION.SDK_INT >= 33) {
             val perm = Manifest.permission.POST_NOTIFICATIONS
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    perm
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
                 requestNotifPerm.launch(perm)
             }
         }
 
         val btnScan = findViewById<Button>(R.id.btnScan)
         val list = findViewById<ListView>(R.id.listTracks)
+        txtNowPlaying = findViewById(R.id.txtNowPlaying)
+        txtProgress = findViewById(R.id.txtProgress)
+        seekBar = findViewById(R.id.seekBar)
 
         adapter = TrackAdapter(this, tracks)
         list.adapter = adapter
+
         currentTrackIndex = prefs.getInt("current_index", -1)
         adapter.currentIndex = currentTrackIndex
 
@@ -90,23 +119,30 @@ class MainActivity : AppCompatActivity() {
 
         btnPlayPause.setOnClickListener {
             startService(
-                Intent(
-                    this,
-                    MusicService::class.java
-                ).setAction(MusicService.ACTION_TOGGLE)
+                Intent(this, MusicService::class.java)
+                    .setAction(MusicService.ACTION_TOGGLE)
             )
         }
 
         btnStop.setOnClickListener {
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_STOP))
+            startService(
+                Intent(this, MusicService::class.java)
+                    .setAction(MusicService.ACTION_STOP)
+            )
         }
 
         btnPrev.setOnClickListener {
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_PREV))
+            startService(
+                Intent(this, MusicService::class.java)
+                    .setAction(MusicService.ACTION_PREV)
+            )
         }
 
         btnNext.setOnClickListener {
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_NEXT))
+            startService(
+                Intent(this, MusicService::class.java)
+                    .setAction(MusicService.ACTION_NEXT)
+            )
         }
 
         btnScan.setOnClickListener {
@@ -119,7 +155,7 @@ class MainActivity : AppCompatActivity() {
             adapter.currentIndex = pos
             adapter.notifyDataSetChanged()
 
-            val uris = ArrayList(tracks.map { it.uri })
+            val uris = ArrayList(tracks.map { it.uri.toString() })
             val titles = ArrayList(tracks.map { it.title })
 
             val i = Intent(this, MusicService::class.java).apply {
@@ -138,17 +174,18 @@ class MainActivity : AppCompatActivity() {
             toast("▶ ${t.title}")
         }
 
+        val filter = IntentFilter().apply {
+            addAction(MusicService.ACTION_TRACK_CHANGED)
+            addAction(MusicService.ACTION_PROGRESS)
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(
-                trackChangedReceiver,
-                android.content.IntentFilter(MusicService.ACTION_TRACK_CHANGED),
-                RECEIVER_NOT_EXPORTED
-            )
+            registerReceiver(trackChangedReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
             ContextCompat.registerReceiver(
                 this,
                 trackChangedReceiver,
-                android.content.IntentFilter(MusicService.ACTION_TRACK_CHANGED),
+                filter,
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
         }
@@ -173,8 +210,10 @@ class MainActivity : AppCompatActivity() {
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.IS_MUSIC
+            MediaStore.Audio.Media.IS_MUSIC,
+            MediaStore.Audio.Media.DURATION
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC}=1 AND ${MediaStore.Audio.Media.SIZE}>=?"
@@ -187,15 +226,28 @@ class MainActivity : AppCompatActivity() {
             selectionArgs,
             "${MediaStore.Audio.Media.DATE_ADDED} DESC"
         )?.use { cursor ->
+
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val name = cursor.getString(nameCol)
-                val uri = ContentUris.withAppendedId(collection, id).toString()
+                val artist = cursor.getString(artistCol) ?: "Unknown"
+                val duration = cursor.getLong(durationCol)
+                val uri = ContentUris.withAppendedId(collection, id)
 
-                tracks.add(Track(name, uri))
+                tracks.add(
+                    Track(
+                        id = id,
+                        title = name,
+                        artist = artist,
+                        uri = uri,
+                        duration = duration
+                    )
+                )
             }
         }
 
@@ -213,6 +265,13 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         unregisterReceiver(trackChangedReceiver)
         super.onDestroy()
+    }
+
+    private fun formatTime(ms: Long): String {
+        val totalSeconds = (ms / 1000).coerceAtLeast(0)
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%d:%02d", minutes, seconds)
     }
 
     private fun toast(s: String) {

@@ -29,6 +29,7 @@ class TrackAdapter(
 
         val txtIndicator = view.findViewById<TextView>(R.id.txtIndicator)
         val txtTitle = view.findViewById<TextView>(R.id.txtTitle)
+        val txtDuration = view.findViewById<TextView>(R.id.txtDuration)
         val layoutControls = view.findViewById<LinearLayout>(R.id.layoutControls)
         val btnPrevMini = view.findViewById<ImageButton>(R.id.btnPrevMini)
         val btnPauseMini = view.findViewById<ImageButton>(R.id.btnPauseMini)
@@ -36,6 +37,7 @@ class TrackAdapter(
 
         val track = tracks[position]
         txtTitle.text = track.title
+        txtDuration.text = formatDuration(track.duration)
 
         if (position == currentIndex) {
             txtIndicator.text = "▶"
@@ -67,5 +69,11 @@ class TrackAdapter(
         }
 
         return view
+    }
+    private fun formatDuration(durationMs: Long): String {
+        val totalSeconds = durationMs / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format("%d:%02d", minutes, seconds)
     }
 }

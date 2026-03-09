@@ -15,10 +15,17 @@ import com.google.android.exoplayer2.ExoPlayer
 import com.google.android.exoplayer2.MediaItem
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
+import android.os.Handler
+import android.os.Looper
 
 class MusicService : Service() {
 
     companion object {
+
+        const val ACTION_PROGRESS = "com.example.localmusicplayer.PROGRESS"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_POSITION = "position"
+        const val EXTRA_DURATION = "duration"
         const val ACTION_TRACK_CHANGED = "com.example.localmusicplayer.TRACK_CHANGED"
         const val EXTRA_CURRENT_INDEX = "current_index"
         const val CHANNEL_ID = "music_channel"
@@ -39,6 +46,15 @@ class MusicService : Service() {
     private lateinit var session: MediaSessionCompat
     private lateinit var mediaSessionConnector: MediaSessionConnector
     private var titles: List<String> = emptyList()
+    private val progressHandler = Handler(Looper.getMainLooper())
+    private val progressRunnable = object : Runnable {
+        override fun run() {
+            if (::player.isInitialized) {
+                broadcastProgress()
+                progressHandler.postDelayed(this, 1000)
+            }
+        }
+    }
 
     private val prefs by lazy { getSharedPreferences("player_prefs", MODE_PRIVATE) }
 
@@ -55,9 +71,10 @@ class MusicService : Service() {
 
         createChannel()
 
-        player.addListener(object : Player.Listener {
+        player.addListener(object : Player.Listener{
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateNotification()
+                progressHandler.post(progressRunnable)
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -126,6 +143,7 @@ class MusicService : Service() {
     }
 
     override fun onDestroy() {
+        progressHandler.removeCallbacks(progressRunnable)
         session.release()
         player.release()
         super.onDestroy()
@@ -224,10 +242,27 @@ class MusicService : Service() {
             .putInt("current_index", -1)
             .apply()
     }
-
     private fun broadcastCurrentIndex() {
+        val idx = player.currentMediaItemIndex
+        val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
+
         val intent = Intent(ACTION_TRACK_CHANGED).apply {
-            putExtra(EXTRA_CURRENT_INDEX, player.currentMediaItemIndex)
+            putExtra(EXTRA_CURRENT_INDEX, idx)
+            putExtra(EXTRA_TITLE, title)
+            putExtra(EXTRA_POSITION, player.currentPosition)
+            putExtra(EXTRA_DURATION, if (player.duration > 0) player.duration else 0L)
+        }
+        sendBroadcast(intent)
+    }
+    private fun broadcastProgress() {
+        val idx = player.currentMediaItemIndex
+        val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
+
+        val intent = Intent(ACTION_PROGRESS).apply {
+            putExtra(EXTRA_CURRENT_INDEX, idx)
+            putExtra(EXTRA_TITLE, title)
+            putExtra(EXTRA_POSITION, player.currentPosition)
+            putExtra(EXTRA_DURATION, if (player.duration > 0) player.duration else 0L)
         }
         sendBroadcast(intent)
     }

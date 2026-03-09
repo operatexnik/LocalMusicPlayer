@@ -25,6 +25,14 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
+    <TextView
+        android:id="@+id/txtDuration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="00:00"
+        android:textSize="12sp"
+        android:layout_marginStart="8dp" />
+
     <LinearLayout
         android:id="@+id/layoutControls"
         android:layout_width="wrap_content"
