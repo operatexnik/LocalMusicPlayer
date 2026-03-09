@@ -22,6 +22,8 @@ class MusicService : Service() {
 
     companion object {
 
+        const val ACTION_SEEK = "SEEK"
+        const val EXTRA_SEEK_TO = "seek_to"
         const val ACTION_PROGRESS = "com.example.localmusicplayer.PROGRESS"
         const val EXTRA_TITLE = "title"
         const val EXTRA_POSITION = "position"
@@ -90,7 +92,6 @@ class MusicService : Service() {
                 val uris = intent.getStringArrayListExtra(EXTRA_URIS) ?: arrayListOf()
                 titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: emptyList()
                 val index = intent.getIntExtra(EXTRA_INDEX, 0)
-
                 val items = uris.map { MediaItem.fromUri(it) }
                 player.setMediaItems(items, index, 0L)
                 player.prepare()
@@ -104,6 +105,13 @@ class MusicService : Service() {
 
             ACTION_TOGGLE -> {
                 if (player.isPlaying) player.pause() else player.play()
+                updateNotification()
+            }
+
+            ACTION_SEEK -> {
+                val seekTo = intent.getLongExtra(EXTRA_SEEK_TO, 0L)
+                player.seekTo(seekTo)
+                broadcastProgress()
                 updateNotification()
             }
 
@@ -129,10 +137,16 @@ class MusicService : Service() {
 
             ACTION_STOP -> {
                 player.stop()
+                player.clearMediaItems()
+
                 val intent = Intent(ACTION_TRACK_CHANGED).apply {
                     putExtra(EXTRA_CURRENT_INDEX, -1)
+                    putExtra(EXTRA_TITLE, "Nothing playing")
+                    putExtra(EXTRA_POSITION, 0L)
+                    putExtra(EXTRA_DURATION, 0L)
                 }
                 sendBroadcast(intent)
+
                 clearCurrentIndex()
                 stopForeground(true)
                 stopSelf()
@@ -243,26 +257,52 @@ class MusicService : Service() {
             .apply()
     }
     private fun broadcastCurrentIndex() {
+        if (player.mediaItemCount == 0 || player.currentMediaItemIndex == -1) {
+            val intent = Intent(ACTION_TRACK_CHANGED).apply {
+                putExtra(EXTRA_CURRENT_INDEX, -1)
+                putExtra(EXTRA_TITLE, "Nothing playing")
+                putExtra(EXTRA_POSITION, 0L)
+                putExtra(EXTRA_DURATION, 0L)
+            }
+            sendBroadcast(intent)
+            return
+        }
+
         val idx = player.currentMediaItemIndex
         val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
+        val duration = if (player.duration > 0) player.duration else 0L
+        val position = player.currentPosition.coerceAtLeast(0L)
 
         val intent = Intent(ACTION_TRACK_CHANGED).apply {
             putExtra(EXTRA_CURRENT_INDEX, idx)
             putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_POSITION, player.currentPosition)
-            putExtra(EXTRA_DURATION, if (player.duration > 0) player.duration else 0L)
+            putExtra(EXTRA_POSITION, position)
+            putExtra(EXTRA_DURATION, duration)
         }
         sendBroadcast(intent)
     }
     private fun broadcastProgress() {
+        if (player.mediaItemCount == 0 || player.currentMediaItemIndex == -1) {
+            val intent = Intent(ACTION_PROGRESS).apply {
+                putExtra(EXTRA_CURRENT_INDEX, -1)
+                putExtra(EXTRA_TITLE, "Nothing playing")
+                putExtra(EXTRA_POSITION, 0L)
+                putExtra(EXTRA_DURATION, 0L)
+            }
+            sendBroadcast(intent)
+            return
+        }
+
         val idx = player.currentMediaItemIndex
         val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
+        val duration = if (player.duration > 0) player.duration else 0L
+        val position = player.currentPosition.coerceAtLeast(0L)
 
         val intent = Intent(ACTION_PROGRESS).apply {
             putExtra(EXTRA_CURRENT_INDEX, idx)
             putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_POSITION, player.currentPosition)
-            putExtra(EXTRA_DURATION, if (player.duration > 0) player.duration else 0L)
+            putExtra(EXTRA_POSITION, position)
+            putExtra(EXTRA_DURATION, duration)
         }
         sendBroadcast(intent)
     }

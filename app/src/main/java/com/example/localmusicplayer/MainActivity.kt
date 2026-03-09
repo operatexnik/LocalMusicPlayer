@@ -18,6 +18,8 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import android.view.View
+import android.widget.LinearLayout
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,6 +29,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtNowPlaying: TextView
     private lateinit var txtProgress: TextView
     private lateinit var seekBar: SeekBar
+
+    private lateinit var playerPanel: LinearLayout
 
     private val tracks = mutableListOf<Track>()
     private var currentTrackIndex = -1
@@ -46,21 +50,38 @@ class MainActivity : AppCompatActivity() {
                     adapter.currentIndex = index
                     adapter.notifyDataSetChanged()
 
-                    txtNowPlaying.text = title
-                    txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
-                    seekBar.max = duration.toInt()
-                    seekBar.progress = position.toInt()
+                    if (index == -1) {
+                        playerPanel.visibility = View.GONE
+                        txtNowPlaying.text = ""
+                        txtProgress.text = ""
+                        seekBar.max = 0
+                        seekBar.progress = 0
+                    } else {
+                        playerPanel.visibility = View.VISIBLE
+                        txtNowPlaying.text = title
+                        txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
+                        seekBar.max = duration.toInt()
+                        seekBar.progress = position.toInt()
+                    }
                 }
 
                 MusicService.ACTION_PROGRESS -> {
+                    val index = intent.getIntExtra(MusicService.EXTRA_CURRENT_INDEX, -1)
                     val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: "Nothing playing"
                     val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
                     val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
 
-                    txtNowPlaying.text = title
-                    txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
-                    seekBar.max = duration.toInt()
-                    seekBar.progress = position.toInt()
+                    if (index == -1 || duration <= 0L) {
+                        txtNowPlaying.text = ""
+                        txtProgress.text = ""
+                        seekBar.max = 0
+                        seekBar.progress = 0
+                    } else {
+                        txtNowPlaying.text = title
+                        txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
+                        seekBar.max = duration.toInt()
+                        seekBar.progress = position.toInt()
+                    }
                 }
             }
         }
@@ -102,6 +123,29 @@ class MainActivity : AppCompatActivity() {
         txtNowPlaying = findViewById(R.id.txtNowPlaying)
         txtProgress = findViewById(R.id.txtProgress)
         seekBar = findViewById(R.id.seekBar)
+        playerPanel = findViewById(R.id.playerPanel)
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    txtProgress.text = "${formatTime(progress.toLong())} / ${formatTime(seekBar?.max?.toLong() ?: 0L)}"
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                val newPosition = seekBar?.progress?.toLong() ?: 0L
+
+                startService(
+                    Intent(this@MainActivity, MusicService::class.java).apply {
+                        action = MusicService.ACTION_SEEK
+                        putExtra(MusicService.EXTRA_SEEK_TO, newPosition)
+                    }
+                )
+            }
+        })
 
         adapter = TrackAdapter(this, tracks)
         list.adapter = adapter
