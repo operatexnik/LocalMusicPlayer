@@ -118,7 +118,6 @@ class MusicService : Service() {
             ACTION_NEXT -> {
                 if (player.hasNextMediaItem()) player.seekToNext() else player.seekTo(0, 0L)
                 player.play()
-                broadcastCurrentIndex()
                 saveCurrentIndex()
                 updateNotification()
             }
@@ -130,7 +129,6 @@ class MusicService : Service() {
                     player.seekTo(last, 0L)
                 }
                 player.play()
-                broadcastCurrentIndex()
                 saveCurrentIndex()
                 updateNotification()
             }

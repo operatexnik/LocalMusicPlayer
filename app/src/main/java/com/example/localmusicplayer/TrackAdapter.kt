@@ -29,6 +29,7 @@ class TrackAdapter(
 
         val txtIndicator = view.findViewById<TextView>(R.id.txtIndicator)
         val txtTitle = view.findViewById<TextView>(R.id.txtTitle)
+        val rootTrackItem = view.findViewById<LinearLayout>(R.id.rootTrackItem)
         val txtDuration = view.findViewById<TextView>(R.id.txtDuration)
         val layoutControls = view.findViewById<LinearLayout>(R.id.layoutControls)
         val btnPrevMini = view.findViewById<ImageButton>(R.id.btnPrevMini)
@@ -42,9 +43,11 @@ class TrackAdapter(
         if (position == currentIndex) {
             txtIndicator.text = "▶"
             layoutControls.visibility = View.VISIBLE
+            rootTrackItem.setBackgroundColor(0x22FFFFFF)
         } else {
             txtIndicator.text = ""
             layoutControls.visibility = View.GONE
+            rootTrackItem.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
 
         btnPrevMini.setOnClickListener {
