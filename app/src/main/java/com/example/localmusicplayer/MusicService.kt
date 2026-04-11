@@ -17,6 +17,9 @@ import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
 import android.os.Handler
 import android.os.Looper
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 
 class MusicService : Service() {
 
@@ -45,6 +48,8 @@ class MusicService : Service() {
     }
 
     private lateinit var player: ExoPlayer
+    private lateinit var audioManager: AudioManager
+    private var audioFocusRequest: AudioFocusRequest? = null
     private lateinit var session: MediaSessionCompat
     private lateinit var mediaSessionConnector: MediaSessionConnector
     private var titles: List<String> = emptyList()
@@ -62,6 +67,8 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
         player = ExoPlayer.Builder(this).build()
         session = MediaSessionCompat(this, "LocalMusicPlayer")
@@ -94,8 +101,10 @@ class MusicService : Service() {
                 val index = intent.getIntExtra(EXTRA_INDEX, 0)
                 val items = uris.map { MediaItem.fromUri(it) }
                 player.setMediaItems(items, index, 0L)
-                player.prepare()
-                player.play()
+                if (requestAudioFocus()) {
+                    player.prepare()
+                    player.play()
+                }
                 broadcastCurrentIndex()
                 saveCurrentIndex()
 
@@ -159,6 +168,9 @@ class MusicService : Service() {
         session.release()
         player.release()
         super.onDestroy()
+        audioFocusRequest?.let {
+            audioManager.abandonAudioFocusRequest(it)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -223,6 +235,41 @@ class MusicService : Service() {
                     .setShowActionsInCompactView(0, 1, 2)
             )
             .build()
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        val afChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+            when (focusChange) {
+                AudioManager.AUDIOFOCUS_LOSS -> {
+                    if (player.isPlaying) player.pause()
+                }
+
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                    if (player.isPlaying) player.pause()
+                }
+
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                    if (player.isPlaying) player.volume = 0.2f
+                }
+
+                AudioManager.AUDIOFOCUS_GAIN -> {
+                    player.volume = 1.0f
+                }
+            }
+        }
+
+        audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setOnAudioFocusChangeListener(afChangeListener)
+            .build()
+
+        val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     private fun updateNotification() {
