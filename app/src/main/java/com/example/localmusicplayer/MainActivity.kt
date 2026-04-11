@@ -127,95 +127,50 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // 1. Обработка открытия файла через плеер (Intent)
         intent?.data?.let { uri ->
-
             val name = getFileName(uri)
-
             val i = Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_PLAY_LIST
-
-                putStringArrayListExtra(
-                    MusicService.EXTRA_URIS,
-                    arrayListOf(uri.toString())
-                )
-
-                putStringArrayListExtra(
-                    MusicService.EXTRA_TITLES,
-                    arrayListOf(name ?: "Unknown")
-                )
-
+                putStringArrayListExtra(MusicService.EXTRA_URIS, arrayListOf(uri.toString()))
+                putStringArrayListExtra(MusicService.EXTRA_TITLES, arrayListOf(name ?: "Unknown"))
                 putExtra(MusicService.EXTRA_INDEX, 0)
             }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(i)
-            } else {
-                startService(i)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+            else startService(i)
         }
 
-        if (Build.VERSION.SDK_INT >= 33) {
-            val perm = Manifest.permission.POST_NOTIFICATIONS
-            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
-                requestNotifPerm.launch(perm)
-            }
-        }
-
+        // 2. Инициализация View
         val list = findViewById<ListView>(R.id.listTracks)
+        val btnRestore = findViewById<android.widget.ImageButton>(R.id.btnRestore)
         txtNowPlaying = findViewById(R.id.txtNowPlaying)
         txtProgress = findViewById(R.id.txtProgress)
         seekBar = findViewById(R.id.seekBar)
         playerPanel = findViewById(R.id.playerPanel)
 
-        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    txtProgress.text = "${formatTime(progress.toLong())} / ${formatTime(seekBar?.max?.toLong() ?: 0L)}"
-                }
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {
-            }
-
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                val newPosition = seekBar?.progress?.toLong() ?: 0L
-
-                startService(
-                    Intent(this@MainActivity, MusicService::class.java).apply {
-                        action = MusicService.ACTION_SEEK
-                        putExtra(MusicService.EXTRA_SEEK_TO, newPosition)
-                    }
-                )
-            }
-        })
-
+        // 3. Настройка адаптера
         adapter = TrackAdapter(this, tracks)
         list.adapter = adapter
-
         currentTrackIndex = prefs.getInt("current_index", -1)
         adapter.currentIndex = currentTrackIndex
 
+        // 4. Логика кнопки "Восстановления" (на Toolbar)
+        btnRestore.setOnClickListener {
+            prefs.edit().remove("hidden_tracks").apply()
+            scanMusic()
+            toast("Все треки возвращены!")
+        }
+        btnRestore.setOnLongClickListener {
+            showRestoreDialog()
+            true
+        }
+
+        // 5. Обычный клик по треку (Запуск музыки)
         list.setOnItemClickListener { _, _, pos, _ ->
             val t = tracks[pos]
             currentTrackIndex = pos
             adapter.currentIndex = pos
             adapter.notifyDataSetChanged()
-
-            list.setOnItemLongClickListener { view, _, pos, _ ->
-                val track = tracks[pos]
-
-                val popup = android.widget.PopupMenu(this, view)
-                popup.menu.add("Удалить")
-
-                popup.setOnMenuItemClickListener {
-                    hideTrack(track.id)
-                    removeTrackFromList(track.id)
-                    true
-                }
-
-                popup.show()
-                true
-            }
 
             val uris = ArrayList(tracks.map { it.uri.toString() })
             val titles = ArrayList(tracks.map { it.title })
@@ -227,29 +182,60 @@ class MainActivity : AppCompatActivity() {
                 putExtra(MusicService.EXTRA_INDEX, pos)
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(i)
-            } else {
-                startService(i)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
+            else startService(i)
 
             toast("▶ ${t.title}")
         }
 
+        // 6. ДОЛГИЙ клик по треку (Удаление/Blacklist)
+        list.setOnItemLongClickListener { view, _, pos, _ ->
+            val track = tracks[pos]
+            val popup = android.widget.PopupMenu(this, view)
+            popup.menu.add("Удалить")
+            popup.setOnMenuItemClickListener {
+                hideTrack(track.id)
+                removeTrackFromList(track.id)
+                toast("Скрыто: ${track.title}")
+                true
+            }
+            popup.show()
+            true
+        }
+
+        // 7. Настройка SeekBar
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    txtProgress.text = "${formatTime(p.toLong())} / ${formatTime(s?.max?.toLong() ?: 0L)}"
+                }
+            }
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {
+                val newPos = s?.progress?.toLong() ?: 0L
+                startService(Intent(this@MainActivity, MusicService::class.java).apply {
+                    action = MusicService.ACTION_SEEK
+                    putExtra(MusicService.EXTRA_SEEK_TO, newPos)
+                })
+            }
+        })
+
+        // 8. Регистрация ресивера и проверка разрешений
         val filter = IntentFilter().apply {
             addAction(MusicService.ACTION_TRACK_CHANGED)
             addAction(MusicService.ACTION_PROGRESS)
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(trackChangedReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
-            ContextCompat.registerReceiver(
-                this,
-                trackChangedReceiver,
-                filter,
-                ContextCompat.RECEIVER_NOT_EXPORTED
-            )
+            ContextCompat.registerReceiver(this, trackChangedReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            val perm = Manifest.permission.POST_NOTIFICATIONS
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                requestNotifPerm.launch(perm)
+            }
         }
 
         ensureStoragePermissionThenScan()
@@ -369,5 +355,50 @@ class MainActivity : AppCompatActivity() {
     }
     private fun toast(s: String) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+    }
+    private fun showRestoreDialog() {
+        val hiddenIds = getHiddenTracks()
+        if (hiddenIds.isEmpty()) {
+            toast("Blacklist пуст")
+            return
+        }
+
+        // Сопоставляем ID и Имена
+        val namesMap = mutableMapOf<String, String>()
+
+        val projection = arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME)
+        contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            null, null, null
+        )?.use { cursor ->
+            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idCol).toString()
+                if (hiddenIds.contains(id)) {
+                    namesMap[id] = cursor.getString(nameCol)
+                }
+            }
+        }
+
+        val idsArray = namesMap.keys.toTypedArray()
+        val namesArray = namesMap.values.toTypedArray()
+        val selectedIds = mutableListOf<String>()
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Восстановить треки")
+            .setMultiChoiceItems(namesArray, null) { _, which, isChecked ->
+                if (isChecked) selectedIds.add(idsArray[which])
+                else selectedIds.remove(idsArray[which])
+            }
+            .setPositiveButton("Восстановить") { _, _ ->
+                val currentHidden = getHiddenTracks()
+                currentHidden.removeAll(selectedIds.toSet())
+                prefs.edit().putStringSet("hidden_tracks", currentHidden).apply()
+                scanMusic()
+            }
+            .setNegativeButton("Отмена", null)
+            .show()
     }
 }
