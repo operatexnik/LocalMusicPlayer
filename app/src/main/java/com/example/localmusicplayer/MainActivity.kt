@@ -173,8 +173,7 @@ class MainActivity : AppCompatActivity() {
             adapter.notifyDataSetChanged()
 
             val uris = ArrayList(tracks.map { it.uri.toString() })
-            val titles = ArrayList(tracks.map { it.title })
-
+            val titles = ArrayList(tracks.map { it.title.substringBeforeLast(".").replace("_", " ") })
             val i = Intent(this, MusicService::class.java).apply {
                 action = MusicService.ACTION_PLAY_LIST
                 putStringArrayListExtra(MusicService.EXTRA_URIS, uris)
@@ -292,7 +291,8 @@ class MainActivity : AppCompatActivity() {
                 val id = cursor.getLong(idCol)
                 if (hidden.contains(id.toString())) continue
 
-                val name = cursor.getString(nameCol)
+                val rawName = cursor.getString(nameCol)
+                val name = rawName.substringBeforeLast(".")
                 val artist = cursor.getString(artistCol) ?: "Unknown"
                 val duration = cursor.getLong(durationCol)
                 val albumId = cursor.getLong(albumIdCol) // Это нам нужно для обложек
@@ -374,10 +374,15 @@ class MainActivity : AppCompatActivity() {
         )?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
+
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol).toString()
+
                 if (hiddenIds.contains(id)) {
-                    namesMap[id] = cursor.getString(nameCol)
+                    val rawName = cursor.getString(nameCol)
+                    // Обрезаем расширение и убираем подчеркивания (бонус)
+                    val cleanName = rawName.substringBeforeLast(".").replace("_", " ")
+                    namesMap[id] = cleanName
                 }
             }
         }
