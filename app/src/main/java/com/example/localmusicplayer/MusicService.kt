@@ -125,19 +125,13 @@ class MusicService : Service() {
             }
 
             ACTION_NEXT -> {
-                if (player.hasNextMediaItem()) player.seekToNext() else player.seekTo(0, 0L)
-                player.play()
+                playNext() // Вызываем наш новый метод
                 saveCurrentIndex()
                 updateNotification()
             }
 
             ACTION_PREV -> {
-                if (player.hasPreviousMediaItem()) player.seekToPrevious()
-                else {
-                    val last = (player.mediaItemCount - 1).coerceAtLeast(0)
-                    player.seekTo(last, 0L)
-                }
-                player.play()
+                playPrevious() // Вызываем наш новый метод (с логикой 5 сек)
                 saveCurrentIndex()
                 updateNotification()
             }
@@ -161,6 +155,35 @@ class MusicService : Service() {
         }
 
         return START_STICKY
+    }
+
+    private fun playPrevious() {
+        val currentPos = player.currentPosition
+
+        // Если трек играет больше 5 секунд — просто мотаем в начало
+        if (currentPos > 5000) {
+            player.seekTo(0)
+        } else {
+            // Иначе переключаем на предыдущий
+            if (player.hasPreviousMediaItem()) {
+                player.seekToPrevious()
+            } else {
+                // Если мы на первом треке — прыгаем в конец
+                val last = (player.mediaItemCount - 1).coerceAtLeast(0)
+                player.seekTo(last, 0L)
+            }
+        }
+        player.play()
+    }
+
+    private fun playNext() {
+        if (player.hasNextMediaItem()) {
+            player.seekToNext()
+        } else {
+            // Если треки кончились — идем в начало списка
+            player.seekTo(0, 0L)
+        }
+        player.play()
     }
 
     override fun onDestroy() {
@@ -309,6 +332,8 @@ class MusicService : Service() {
                 putExtra(EXTRA_POSITION, 0L)
                 putExtra(EXTRA_DURATION, 0L)
             }
+            intent.putExtra("IS_PLAYING", player.isPlaying) // Добавляем статус плеера
+            sendBroadcast(intent)
             sendBroadcast(intent)
             return
         }
@@ -334,6 +359,8 @@ class MusicService : Service() {
                 putExtra(EXTRA_POSITION, 0L)
                 putExtra(EXTRA_DURATION, 0L)
             }
+            intent.putExtra("IS_PLAYING", player.isPlaying) // Добавляем статус плеера
+            sendBroadcast(intent)
             sendBroadcast(intent)
             return
         }
