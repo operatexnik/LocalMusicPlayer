@@ -20,6 +20,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.ImageButton
 
 class MainActivity : AppCompatActivity() {
 
@@ -126,6 +127,20 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        val btnPrevMini = findViewById<ImageButton>(R.id.btnPrevMini)
+        val btnPauseMini = findViewById<ImageButton>(R.id.btnPauseMini)
+        val btnNextMini = findViewById<ImageButton>(R.id.btnNextMini)
+
+        btnPrevMini.setOnClickListener {
+            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_PREV))
+        }
+        btnPauseMini.setOnClickListener {
+            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_TOGGLE))
+        }
+        btnNextMini.setOnClickListener {
+            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_NEXT))
+        }
 
         // 1. Обработка открытия файла через плеер (Intent)
         intent?.data?.let { uri ->
