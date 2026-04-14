@@ -35,13 +35,18 @@ class TrackAdapter(
         val rootTrackItem = view.findViewById<LinearLayout>(R.id.rootTrackItem)
         val imgAlbumArt = view.findViewById<ImageView>(R.id.imgAlbumArt)
 
+        // Внутри getView() оставь только это (остальное удали):
+
         txtTitle.text = track.title
         txtDuration.text = formatDuration(track.duration)
 
-        // Загрузка обложки (ТОЛЬКО 64x64, чтобы не фризило!)
+// Загрузка обложки
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val albumUri = ContentUris.withAppendedId(android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI, track.albumId)
+                val albumUri = ContentUris.withAppendedId(
+                    android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+                    track.albumId
+                )
                 val bitmap = context.contentResolver.loadThumbnail(albumUri, Size(64, 64), null)
                 imgAlbumArt.setImageBitmap(bitmap)
             } else {
@@ -51,32 +56,19 @@ class TrackAdapter(
             imgAlbumArt.setImageResource(R.drawable.default_cover)
         }
 
-        // Состояние (мини-кнопки появляются, но строка не растет в высоту)
+// Состояние текущего трека
         if (position == currentIndex) {
-            layoutControls.visibility = View.VISIBLE
             rootTrackItem.setBackgroundColor(android.graphics.Color.parseColor("#33FFFFFF"))
         } else {
-            layoutControls.visibility = View.GONE
             rootTrackItem.setBackgroundColor(android.graphics.Color.TRANSPARENT)
         }
 
-        // Слушатели для мини-кнопок
-        view.findViewById<ImageButton>(R.id.btnPrevMini).setOnClickListener {
-            context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_PREV))
-        }
-        view.findViewById<ImageButton>(R.id.btnPauseMini).setOnClickListener {
-            context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_TOGGLE))
-        }
-        view.findViewById<ImageButton>(R.id.btnNextMini).setOnClickListener {
-            context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_NEXT))
-        }
-
-        // Обычный клик — играть
+// Обычный клик — играть
         rootTrackItem.setOnClickListener {
             (parent as? android.widget.ListView)?.performItemClick(view, position, getItemId(position))
         }
 
-        // ДОЛГИЙ КЛИК — УДАЛИТЬ (Возвращаем на базу!)
+// Долгий клик — удалить
         rootTrackItem.setOnLongClickListener {
             showPopupMenu(it, track)
             true

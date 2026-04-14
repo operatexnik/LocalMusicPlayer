@@ -158,21 +158,15 @@ class MusicService : Service() {
     }
 
     private fun playPrevious() {
-        val currentPos = player.currentPosition
-
-        // Если трек играет больше 5 секунд — просто мотаем в начало
-        if (currentPos > 5000) {
-            player.seekTo(0)
+        // Жёсткий скип назад — всегда на предыдущий трек, без rewind
+        if (player.hasPreviousMediaItem()) {
+            player.seekToPreviousMediaItem()   // ← вот этот метод важный!
         } else {
-            // Иначе переключаем на предыдущий
-            if (player.hasPreviousMediaItem()) {
-                player.seekToPrevious()
-            } else {
-                // Если мы на первом треке — прыгаем в конец
-                val last = (player.mediaItemCount - 1).coerceAtLeast(0)
-                player.seekTo(last, 0L)
-            }
+            // Если на первом треке — прыгаем в конец плейлиста
+            val lastIndex = (player.mediaItemCount - 1).coerceAtLeast(0)
+            player.seekTo(lastIndex, 0L)
         }
+
         player.play()
     }
 

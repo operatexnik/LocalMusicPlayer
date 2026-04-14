@@ -39,7 +39,7 @@
         </androidx.appcompat.widget.Toolbar>
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Основной контент: список + отступ снизу под панель -->
+    <!-- Список треков -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -51,10 +51,9 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:paddingBottom="180dp" />  <!-- отступ под панель, чтобы последний трек не прятался -->
+            android:paddingBottom="200dp" />   <!-- чуть больше отступ, чтобы не налезало на панель -->
     </LinearLayout>
 
-    <!-- Нижняя панель плеера (фиксированная снизу) -->
     <!-- Нижняя панель плеера -->
     <LinearLayout
         android:id="@+id/playerPanel"
@@ -62,83 +61,88 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="#1F1F1F"
+        android:elevation="12dp"
         android:orientation="vertical"
-        android:elevation="8dp"
         android:visibility="gone">
 
-    <!-- Прогресс и время -->
-    <SeekBar
-        android:id="@+id/seekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="16dp"
-        android:layout_marginTop="8dp" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="12dp">
-
-        <!-- Название + прогресс -->
-        <LinearLayout
-            android:layout_width="0dp"
+        <!-- SeekBar -->
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="12dp" />
 
-            <TextView
-                android:id="@+id/txtNowPlaying"
+        <!-- Название трека + время + кнопки -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="16dp">
+
+            <!-- Текстовая часть -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/txtNowPlaying"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/txtProgress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    android:textColor="#88FFFFFF" />
+            </LinearLayout>
+
+            <!-- Кнопки управления -->
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textSize="16sp"
-                android:textColor="#FFFFFF"
-                android:maxLines="1"
-                android:ellipsize="end" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <TextView
-                android:id="@+id/txtProgress"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="#88FFFFFF" />
-        </LinearLayout>
+                <ImageButton
+                    android:id="@+id/btnPrevMini"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_previous"
+                    app:tint="#FFFFFF" />
 
-        <!-- Мини-кнопки управления -->
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
+                <ImageButton
+                    android:id="@+id/btnPauseMini"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_pause"
+                    app:tint="#FFFFFF"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp" />
 
-            <ImageButton
-                android:id="@+id/btnPrevMini"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_previous"
-                app:tint="#FFFFFF" />
-
-            <ImageButton
-                android:id="@+id/btnPauseMini"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_pause"
-                app:tint="#FFFFFF" />
-
-            <ImageButton
-                android:id="@+id/btnNextMini"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_next"
-                app:tint="#FFFFFF" />
+                <ImageButton
+                    android:id="@+id/btnNextMini"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_media_next"
+                    app:tint="#FFFFFF" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
 
-    </androidx.coordinatorlayout.widget.CoordinatorLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

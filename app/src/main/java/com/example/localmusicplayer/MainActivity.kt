@@ -127,6 +127,16 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Полностью тёмные системные панели
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            window.statusBarColor = android.graphics.Color.BLACK
+            window.navigationBarColor = android.graphics.Color.BLACK
+        }
+
+// Для Android 11+ делаем красивый edge-to-edge
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.setDecorFitsSystemWindows(false)
+        }
 
         val btnPrevMini = findViewById<ImageButton>(R.id.btnPrevMini)
         val btnPauseMini = findViewById<ImageButton>(R.id.btnPauseMini)
