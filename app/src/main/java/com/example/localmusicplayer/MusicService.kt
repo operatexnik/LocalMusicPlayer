@@ -99,12 +99,22 @@ class MusicService : Service() {
                 val uris = intent.getStringArrayListExtra(EXTRA_URIS) ?: arrayListOf()
                 titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: emptyList()
                 val index = intent.getIntExtra(EXTRA_INDEX, 0)
+                val keepPosition = intent.getBooleanExtra("KEEP_POSITION", false)
+
                 val items = uris.map { MediaItem.fromUri(it) }
-                player.setMediaItems(items, index, 0L)
+
+                if (keepPosition && player.isPlaying && player.currentMediaItemIndex == index) {
+                    // Просто обновляем очередь, но не трогаем текущую позицию
+                    player.setMediaItems(items, index, player.currentPosition)
+                } else {
+                    player.setMediaItems(items, index, 0L)
+                }
+
                 if (requestAudioFocus()) {
                     player.prepare()
-                    player.play()
+                    if (!keepPosition) player.play()
                 }
+
                 broadcastCurrentIndex()
                 saveCurrentIndex()
 

@@ -340,8 +340,54 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
     fun removeTrackFromList(id: Long) {
-        tracks.removeAll { it.id == id }
+        val removedIndex = tracks.indexOfFirst { it.id == id }
+        if (removedIndex == -1) return
+
+        val isRemovingCurrent = (removedIndex == currentTrackIndex)
+
+        // Удаляем трек из списка
+        tracks.removeAt(removedIndex)
         adapter.notifyDataSetChanged()
+
+        // Если удалили именно текущий трек — останавливаем плеер
+        if (isRemovingCurrent) {
+            currentTrackIndex = -1
+            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_STOP))
+            playerPanel.visibility = View.GONE
+            return
+        }
+
+        // Если удалили трек ДО текущего — корректируем индекс
+        if (removedIndex < currentTrackIndex) {
+            currentTrackIndex--
+            adapter.currentIndex = currentTrackIndex
+            adapter.notifyDataSetChanged()
+        }
+
+        // Перезагружаем плейлист в сервис, но **без сброса позиции**
+        refreshPlaylistKeepPosition()
+    }
+    private fun refreshPlaylistKeepPosition() {
+        if (tracks.isEmpty() || currentTrackIndex < 0) return
+
+        val uris = ArrayList(tracks.map { it.uri.toString() })
+        val titles = ArrayList(tracks.map { it.title.substringBeforeLast(".").replace("_", " ") })
+
+        val intent = Intent(this, MusicService::class.java).apply {
+            action = MusicService.ACTION_PLAY_LIST
+            putStringArrayListExtra(MusicService.EXTRA_URIS, uris)
+            putStringArrayListExtra(MusicService.EXTRA_TITLES, titles)
+            putExtra(MusicService.EXTRA_INDEX, currentTrackIndex)
+
+            // Важно: не сбрасываем позицию
+            putExtra("KEEP_POSITION", true)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent)
+        } else {
+            startService(intent)
+        }
     }
     private fun formatTime(ms: Long): String {
         val totalSeconds = (ms / 1000).coerceAtLeast(0)
