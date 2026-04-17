@@ -335,9 +335,8 @@ class MusicService : Service() {
                 putExtra(EXTRA_TITLE, "Nothing playing")
                 putExtra(EXTRA_POSITION, 0L)
                 putExtra(EXTRA_DURATION, 0L)
+                putExtra("IS_PLAYING", false)
             }
-            intent.putExtra("IS_PLAYING", player.isPlaying) // Добавляем статус плеера
-            sendBroadcast(intent)
             sendBroadcast(intent)
             return
         }
@@ -352,9 +351,11 @@ class MusicService : Service() {
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_POSITION, position)
             putExtra(EXTRA_DURATION, duration)
+            putExtra("IS_PLAYING", player.isPlaying)
         }
         sendBroadcast(intent)
     }
+
     private fun broadcastProgress() {
         if (player.mediaItemCount == 0 || player.currentMediaItemIndex == -1) {
             val intent = Intent(ACTION_PROGRESS).apply {
@@ -362,9 +363,8 @@ class MusicService : Service() {
                 putExtra(EXTRA_TITLE, "Nothing playing")
                 putExtra(EXTRA_POSITION, 0L)
                 putExtra(EXTRA_DURATION, 0L)
+                putExtra("IS_PLAYING", false)
             }
-            intent.putExtra("IS_PLAYING", player.isPlaying) // Добавляем статус плеера
-            sendBroadcast(intent)
             sendBroadcast(intent)
             return
         }
@@ -379,6 +379,7 @@ class MusicService : Service() {
             putExtra(EXTRA_TITLE, title)
             putExtra(EXTRA_POSITION, position)
             putExtra(EXTRA_DURATION, duration)
+            putExtra("IS_PLAYING", player.isPlaying)
         }
         sendBroadcast(intent)
     }

@@ -30,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var txtNowPlaying: TextView
     private lateinit var txtProgress: TextView
     private lateinit var seekBar: SeekBar
+    private lateinit var btnPauseMini: ImageButton
 
     private lateinit var playerPanel: LinearLayout
 
@@ -46,6 +47,7 @@ class MainActivity : AppCompatActivity() {
                     val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: "Nothing playing"
                     val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
                     val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
+                    val isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
 
                     currentTrackIndex = index
                     adapter.currentIndex = index
@@ -63,6 +65,8 @@ class MainActivity : AppCompatActivity() {
                         txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
                         seekBar.max = duration.toInt()
                         seekBar.progress = position.toInt()
+
+                        updatePauseButton(isPlaying)
                     }
                 }
 
@@ -71,6 +75,7 @@ class MainActivity : AppCompatActivity() {
                     val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: "Nothing playing"
                     val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
                     val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
+                    val isPlaying = intent.getBooleanExtra("IS_PLAYING", false)   // ← добавили
 
                     if (index == -1 || duration <= 0L) {
                         txtNowPlaying.text = ""
@@ -82,6 +87,8 @@ class MainActivity : AppCompatActivity() {
                         txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
                         seekBar.max = duration.toInt()
                         seekBar.progress = position.toInt()
+
+                        updatePauseButton(isPlaying)   // ← добавили
                     }
                 }
             }
@@ -139,7 +146,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val btnPrevMini = findViewById<ImageButton>(R.id.btnPrevMini)
-        val btnPauseMini = findViewById<ImageButton>(R.id.btnPauseMini)
+        btnPauseMini = findViewById(R.id.btnPauseMini)        // ← изменил
         val btnNextMini = findViewById<ImageButton>(R.id.btnNextMini)
 
         btnPrevMini.setOnClickListener {
@@ -476,5 +483,13 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Отмена", null)
             .show()
+    }
+    private fun updatePauseButton(isPlaying: Boolean) {
+        if (!::btnPauseMini.isInitialized) return
+
+        btnPauseMini.setImageResource(
+            if (isPlaying) android.R.drawable.ic_media_pause
+            else android.R.drawable.ic_media_play
+        )
     }
 }
