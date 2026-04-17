@@ -168,11 +168,14 @@ class MusicService : Service() {
     }
 
     private fun playPrevious() {
-        // Жёсткий скип назад — всегда на предыдущий трек, без rewind
-        if (player.hasPreviousMediaItem()) {
-            player.seekToPreviousMediaItem()   // ← вот этот метод важный!
+        // Максимально жёсткий скип назад — без всякого rewind текущего трека
+        val currentIndex = player.currentMediaItemIndex
+
+        if (currentIndex > 0) {
+            // Если не первый трек — переходим к предыдущему
+            player.seekTo(currentIndex - 1, 0L)
         } else {
-            // Если на первом треке — прыгаем в конец плейлиста
+            // Если первый трек — переходим в конец плейлиста
             val lastIndex = (player.mediaItemCount - 1).coerceAtLeast(0)
             player.seekTo(lastIndex, 0L)
         }
