@@ -24,6 +24,7 @@
         app:cardCornerRadius="21dp"
         app:cardElevation="0dp"
         app:cardBackgroundColor="#1AFFFFFF">
+
         <ImageView
             android:id="@+id/imgAlbumArt"
             android:layout_width="match_parent"
@@ -66,14 +67,12 @@
             app:tint="#FFFFFF" />
 
         <ImageButton
-
             android:id="@+id/btnNextMini"
             android:layout_width="30dp"
             android:layout_height="30dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@android:drawable/ic_media_next"
             app:tint="#FFFFFF" />
-
     </LinearLayout>
 
     <TextView
@@ -83,4 +82,5 @@
         android:layout_marginStart="6dp"
         android:textSize="11sp"
         android:textColor="#88FFFFFF" />
+
 </LinearLayout>

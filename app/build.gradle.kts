@@ -47,4 +47,6 @@ dependencies {
     implementation("com.google.android.exoplayer:exoplayer:2.19.1")
     implementation("androidx.media:media:1.6.0")
     implementation("com.google.android.exoplayer:extension-mediasession:2.19.1")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.4.0") // опционально, но полезно
+    implementation("io.coil-kt.coil3:coil:3.4.0")
 }
