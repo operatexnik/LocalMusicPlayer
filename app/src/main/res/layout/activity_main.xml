@@ -5,9 +5,9 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#000000"
     android:fitsSystemWindows="true">
 
-    <!-- Toolbar -->
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -18,10 +18,8 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:paddingEnd="8dp"
-            app:layout_scrollFlags="scroll|enterAlways|snap">
+            android:paddingEnd="8dp">
 
-            <!-- Кнопка восстановления справа -->
             <ImageButton
                 android:id="@+id/btnRestore"
                 android:layout_width="48dp"
@@ -29,12 +27,11 @@
                 android:layout_gravity="end"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_menu_rotate"
-                android:contentDescription="Restore tracks" />
+                app:tint="#FFFFFF" />
 
         </androidx.appcompat.widget.Toolbar>
     </com.google.android.material.appbar.AppBarLayout>
 
-    <!-- Список треков -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -45,11 +42,11 @@
             android:id="@+id/listTracks"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:divider="@null"
             android:clipToPadding="false"
-            android:paddingBottom="200dp" />   <!-- чуть больше отступ, чтобы не налезало на панель -->
+            android:paddingBottom="180dp" />
     </LinearLayout>
 
-    <!-- Нижняя панель плеера -->
     <LinearLayout
         android:id="@+id/playerPanel"
         android:layout_width="match_parent"
@@ -58,28 +55,40 @@
         android:background="#1F1F1F"
         android:elevation="12dp"
         android:orientation="vertical"
+        android:clickable="true"
+        android:focusable="true"
         android:visibility="gone">
 
-        <!-- SeekBar -->
         <SeekBar
             android:id="@+id/seekBar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginHorizontal="16dp"
-            android:layout_marginTop="12dp" />
+            android:layout_height="32dp"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="16dp"
 
-        <!-- Инфо + кнопки -->
+            android:background="@null"
+            android:splitTrack="false"
+            android:stateListAnimator="@null"
+
+            android:thumb="@drawable/custom_thumb"
+            android:thumbOffset="0dp"
+            android:paddingStart="0dp"
+            android:paddingEnd="0dp"
+
+            android:progressTint="#FFFFFF"
+            android:progressBackgroundTint="#44FFFFFF"
+            android:thumbTint="#FFFFFF" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
             android:paddingTop="8dp"
-            android:paddingBottom="16dp">
+            android:paddingBottom="24dp">
 
-            <!-- Название трека -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -100,11 +109,11 @@
                     android:id="@+id/txtProgress"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="13sp"
-                    android:textColor="#88FFFFFF" />
+                    android:textSize="12sp"
+                    android:textColor="#AAFFFFFF"
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
-            <!-- Кнопки управления -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -113,26 +122,25 @@
 
                 <ImageButton
                     android:id="@+id/btnPrevMini"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_media_previous"
                     app:tint="#FFFFFF" />
 
                 <ImageButton
                     android:id="@+id/btnPauseMini"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:layout_marginHorizontal="8dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_media_pause"
-                    app:tint="#FFFFFF"
-                    android:layout_marginStart="12dp"
-                    android:layout_marginEnd="12dp" />
+                    app:tint="#FFFFFF" />
 
                 <ImageButton
                     android:id="@+id/btnNextMini"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_media_next"
                     app:tint="#FFFFFF" />

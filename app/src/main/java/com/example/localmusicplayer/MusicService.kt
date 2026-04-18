@@ -24,7 +24,6 @@ import android.media.AudioManager
 class MusicService : Service() {
 
     companion object {
-
         const val ACTION_SEEK = "SEEK"
         const val EXTRA_SEEK_TO = "seek_to"
         const val ACTION_PROGRESS = "com.example.localmusicplayer.PROGRESS"
@@ -53,12 +52,14 @@ class MusicService : Service() {
     private lateinit var session: MediaSessionCompat
     private lateinit var mediaSessionConnector: MediaSessionConnector
     private var titles: List<String> = emptyList()
+
     private val progressHandler = Handler(Looper.getMainLooper())
     private val progressRunnable = object : Runnable {
         override fun run() {
-            if (::player.isInitialized) {
+            if (::player.isInitialized && player.isPlaying) {
                 broadcastProgress()
-                progressHandler.postDelayed(this, 1000)
+                // Обновляем каждые 200мс для плавности SeekBar
+                progressHandler.postDelayed(this, 200)
             }
         }
     }
@@ -67,7 +68,6 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-
         audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
         player = ExoPlayer.Builder(this).build()
@@ -80,15 +80,21 @@ class MusicService : Service() {
 
         createChannel()
 
-        player.addListener(object : Player.Listener{
+        player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 updateNotification()
-                progressHandler.post(progressRunnable)
+                if (isPlaying) {
+                    progressHandler.post(progressRunnable)
+                } else {
+                    progressHandler.removeCallbacks(progressRunnable)
+                    broadcastProgress() // Отправить финальный статус при паузе
+                }
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 broadcastCurrentIndex()
                 updateNotification()
+                saveCurrentIndex()
             }
         })
     }
@@ -103,8 +109,7 @@ class MusicService : Service() {
 
                 val items = uris.map { MediaItem.fromUri(it) }
 
-                if (keepPosition && player.isPlaying && player.currentMediaItemIndex == index) {
-                    // Просто обновляем очередь, но не трогаем текущую позицию
+                if (keepPosition && player.currentMediaItemIndex == index) {
                     player.setMediaItems(items, index, player.currentPosition)
                 } else {
                     player.setMediaItems(items, index, 0L)
@@ -112,194 +117,123 @@ class MusicService : Service() {
 
                 if (requestAudioFocus()) {
                     player.prepare()
+                    // Возвращаем твоё условие: играть только если не keepPosition
                     if (!keepPosition) player.play()
                 }
-
-                broadcastCurrentIndex()
-                saveCurrentIndex()
-
                 startForeground(NOTIF_ID, buildNotification())
-                updateNotification()
             }
 
             ACTION_TOGGLE -> {
                 if (player.isPlaying) player.pause() else player.play()
-                updateNotification()
             }
 
             ACTION_SEEK -> {
                 val seekTo = intent.getLongExtra(EXTRA_SEEK_TO, 0L)
                 player.seekTo(seekTo)
+                player.play() // ФИКС: Играем сразу после перемотки
                 broadcastProgress()
-                updateNotification()
             }
 
-            ACTION_NEXT -> {
-                playNext() // Вызываем наш новый метод
-                saveCurrentIndex()
-                updateNotification()
-            }
-
-            ACTION_PREV -> {
-                playPrevious() // Вызываем наш новый метод (с логикой 5 сек)
-                saveCurrentIndex()
-                updateNotification()
-            }
+            ACTION_NEXT -> playNext()
+            ACTION_PREV -> playPrevious()
 
             ACTION_STOP -> {
                 player.stop()
                 player.clearMediaItems()
-
-                val intent = Intent(ACTION_TRACK_CHANGED).apply {
-                    putExtra(EXTRA_CURRENT_INDEX, -1)
-                    putExtra(EXTRA_TITLE, "Nothing playing")
-                    putExtra(EXTRA_POSITION, 0L)
-                    putExtra(EXTRA_DURATION, 0L)
-                }
-                sendBroadcast(intent)
-
                 clearCurrentIndex()
                 stopForeground(true)
                 stopSelf()
             }
-        }
 
+            ACTION_PROGRESS -> broadcastProgress()
+        }
         return START_STICKY
     }
 
     private fun playPrevious() {
-        // Максимально жёсткий скип назад — без всякого rewind текущего трека
-        val currentIndex = player.currentMediaItemIndex
-
-        if (currentIndex > 0) {
-            // Если не первый трек — переходим к предыдущему
-            player.seekTo(currentIndex - 1, 0L)
+        if (player.currentPosition > 5000) {
+            player.seekTo(0L)
         } else {
-            // Если первый трек — переходим в конец плейлиста
-            val lastIndex = (player.mediaItemCount - 1).coerceAtLeast(0)
-            player.seekTo(lastIndex, 0L)
+            if (player.hasPreviousMediaItem()) player.seekToPrevious()
+            else player.seekTo(player.mediaItemCount - 1, 0L)
         }
-
         player.play()
     }
 
     private fun playNext() {
-        if (player.hasNextMediaItem()) {
-            player.seekToNext()
-        } else {
-            // Если треки кончились — идем в начало списка
-            player.seekTo(0, 0L)
-        }
+        if (player.hasNextMediaItem()) player.seekToNext()
+        else player.seekTo(0, 0L)
         player.play()
     }
 
-    override fun onDestroy() {
-        progressHandler.removeCallbacks(progressRunnable)
-        session.release()
-        player.release()
-        super.onDestroy()
-        audioFocusRequest?.let {
-            audioManager.abandonAudioFocusRequest(it)
+    private fun broadcastCurrentIndex() = broadcastProgress(ACTION_TRACK_CHANGED)
+    private fun broadcastProgress(action: String = ACTION_PROGRESS) {
+        if (!::player.isInitialized) return
+
+        val idx = player.currentMediaItemIndex
+        val intent = Intent(action).apply {
+            putExtra(EXTRA_CURRENT_INDEX, idx)
+            putExtra(EXTRA_TITLE, if (idx in titles.indices) titles[idx] else "Unknown")
+            putExtra(EXTRA_POSITION, player.currentPosition)
+            putExtra(EXTRA_DURATION, player.duration.coerceAtLeast(0L))
+            putExtra("IS_PLAYING", player.isPlaying)
         }
+        sendBroadcast(intent)
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
-
     private fun buildNotification(): Notification {
-        val toggleIntent = PendingIntent.getService(
-            this, 1,
+        val pToggle = PendingIntent.getService(this, 1,
             Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE),
-            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
-        )
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
 
-        val nextIntent = PendingIntent.getService(
-            this, 2,
+        val pNext = PendingIntent.getService(this, 2,
             Intent(this, MusicService::class.java).setAction(ACTION_NEXT),
-            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
-        )
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
 
-        val prevIntent = PendingIntent.getService(
-            this, 3,
+        val pPrev = PendingIntent.getService(this, 3,
             Intent(this, MusicService::class.java).setAction(ACTION_PREV),
-            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
-        )
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
 
-        val stopIntent = PendingIntent.getService(
-            this, 4,
+        val pStop = PendingIntent.getService(this, 4,
             Intent(this, MusicService::class.java).setAction(ACTION_STOP),
-            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
-        )
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
 
-        val isPlaying = player.isPlaying
-        val idx = player.currentMediaItemIndex
-        val title = if (idx in titles.indices) titles[idx] else "Playing"
-        val openAppIntent = PendingIntent.getActivity(
-            this,
-            0,
+        val pOpen = PendingIntent.getActivity(this, 0,
             Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
-        )
+            PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag())
+
+        val idx = player.currentMediaItemIndex
+        val title = if (idx in titles.indices) titles[idx] else "Music Player"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentIntent(openAppIntent)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.ic_media_play) // СТРОКА-СПАСИТЕЛЬНИЦА (теперь не вылетит)
+            .setContentIntent(pOpen)
             .setContentTitle(title)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOnlyAlertOnce(true)
+            .setOngoing(player.isPlaying)
             .setSilent(true)
-            .setOngoing(true)
-            .addAction(NotificationCompat.Action(android.R.drawable.ic_media_previous, "Prev", prevIntent))
-            .addAction(
-                NotificationCompat.Action(
-                    if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
-                    if (isPlaying) "Pause" else "Play",
-                    toggleIntent
-                )
-            )
-            .addAction(NotificationCompat.Action(android.R.drawable.ic_media_next, "Next", nextIntent))
-            .addAction(NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent))
-            .setStyle(
-                MediaStyle()
-                    .setMediaSession(session.sessionToken)
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
+            .setOnlyAlertOnce(true)
+            .addAction(NotificationCompat.Action(android.R.drawable.ic_media_previous, "Prev", pPrev))
+            .addAction(NotificationCompat.Action(
+                if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+                "Toggle", pToggle))
+            .addAction(NotificationCompat.Action(android.R.drawable.ic_media_next, "Next", pNext))
+            .addAction(NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", pStop))
+            .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+                .setMediaSession(session.sessionToken)
+                .setShowActionsInCompactView(0, 1, 2))
             .build()
     }
 
     private fun requestAudioFocus(): Boolean {
-        val afChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-            when (focusChange) {
-                AudioManager.AUDIOFOCUS_LOSS -> {
-                    if (player.isPlaying) player.pause()
-                }
-
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                    if (player.isPlaying) player.pause()
-                }
-
-                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    if (player.isPlaying) player.volume = 0.2f
-                }
-
-                AudioManager.AUDIOFOCUS_GAIN -> {
-                    player.volume = 1.0f
-                }
-            }
-        }
-
         audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setOnAudioFocusChangeListener(afChangeListener)
-            .build()
-
-        val result = audioManager.requestAudioFocus(audioFocusRequest!!)
-        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+            .setOnAudioFocusChangeListener { focus ->
+                when (focus) {
+                    AudioManager.AUDIOFOCUS_LOSS, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> player.pause()
+                    AudioManager.AUDIOFOCUS_GAIN -> player.play()
+                }
+            }.build()
+        return audioManager.requestAudioFocus(audioFocusRequest!!) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     }
 
     private fun updateNotification() {
@@ -309,83 +243,22 @@ class MusicService : Service() {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            val ch = NotificationChannel(
-                CHANNEL_ID,
-                "Music",
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            ch.setSound(null, null)
-            ch.enableVibration(false)
-            nm.createNotificationChannel(ch)
+            val channel = NotificationChannel(CHANNEL_ID, "Music", NotificationManager.IMPORTANCE_LOW)
+            channel.setSound(null, null)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
         }
     }
-    private fun saveCurrentIndex() {
-        prefs.edit()
-            .putInt("current_index", player.currentMediaItemIndex)
-            .apply()
+
+    private fun saveCurrentIndex() = prefs.edit().putInt("current_index", player.currentMediaItemIndex).apply()
+    private fun clearCurrentIndex() = prefs.edit().putInt("current_index", -1).apply()
+    private fun immutableFlag(): Int = if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0
+
+    override fun onDestroy() {
+        progressHandler.removeCallbacks(progressRunnable)
+        player.release()
+        session.release()
+        super.onDestroy()
     }
 
-    private fun clearCurrentIndex() {
-        prefs.edit()
-            .putInt("current_index", -1)
-            .apply()
-    }
-    private fun broadcastCurrentIndex() {
-        if (player.mediaItemCount == 0 || player.currentMediaItemIndex == -1) {
-            val intent = Intent(ACTION_TRACK_CHANGED).apply {
-                putExtra(EXTRA_CURRENT_INDEX, -1)
-                putExtra(EXTRA_TITLE, "Nothing playing")
-                putExtra(EXTRA_POSITION, 0L)
-                putExtra(EXTRA_DURATION, 0L)
-                putExtra("IS_PLAYING", false)
-            }
-            sendBroadcast(intent)
-            return
-        }
-
-        val idx = player.currentMediaItemIndex
-        val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
-        val duration = if (player.duration > 0) player.duration else 0L
-        val position = player.currentPosition.coerceAtLeast(0L)
-
-        val intent = Intent(ACTION_TRACK_CHANGED).apply {
-            putExtra(EXTRA_CURRENT_INDEX, idx)
-            putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_POSITION, position)
-            putExtra(EXTRA_DURATION, duration)
-            putExtra("IS_PLAYING", player.isPlaying)
-        }
-        sendBroadcast(intent)
-    }
-
-    private fun broadcastProgress() {
-        if (player.mediaItemCount == 0 || player.currentMediaItemIndex == -1) {
-            val intent = Intent(ACTION_PROGRESS).apply {
-                putExtra(EXTRA_CURRENT_INDEX, -1)
-                putExtra(EXTRA_TITLE, "Nothing playing")
-                putExtra(EXTRA_POSITION, 0L)
-                putExtra(EXTRA_DURATION, 0L)
-                putExtra("IS_PLAYING", false)
-            }
-            sendBroadcast(intent)
-            return
-        }
-
-        val idx = player.currentMediaItemIndex
-        val title = if (idx in titles.indices) titles[idx] else "Nothing playing"
-        val duration = if (player.duration > 0) player.duration else 0L
-        val position = player.currentPosition.coerceAtLeast(0L)
-
-        val intent = Intent(ACTION_PROGRESS).apply {
-            putExtra(EXTRA_CURRENT_INDEX, idx)
-            putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_POSITION, position)
-            putExtra(EXTRA_DURATION, duration)
-            putExtra("IS_PLAYING", player.isPlaying)
-        }
-        sendBroadcast(intent)
-    }
-    private fun immutableFlag(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+    override fun onBind(intent: Intent?): IBinder? = null
 }
