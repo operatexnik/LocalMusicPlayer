@@ -58,7 +58,6 @@ class MusicService : Service() {
         override fun run() {
             if (::player.isInitialized && player.isPlaying) {
                 broadcastProgress()
-                // Обновляем каждые 200мс для плавности SeekBar
                 progressHandler.postDelayed(this, 200)
             }
         }
@@ -87,7 +86,7 @@ class MusicService : Service() {
                     progressHandler.post(progressRunnable)
                 } else {
                     progressHandler.removeCallbacks(progressRunnable)
-                    broadcastProgress() // Отправить финальный статус при паузе
+                    broadcastProgress()
                 }
             }
 
@@ -117,7 +116,6 @@ class MusicService : Service() {
 
                 if (requestAudioFocus()) {
                     player.prepare()
-                    // Возвращаем твоё условие: играть только если не keepPosition
                     if (!keepPosition) player.play()
                 }
                 startForeground(NOTIF_ID, buildNotification())
@@ -129,9 +127,18 @@ class MusicService : Service() {
 
             ACTION_SEEK -> {
                 val seekTo = intent.getLongExtra(EXTRA_SEEK_TO, 0L)
+                val wasPlaying = player.isPlaying // Запоминаем, играло ли до перемотки
+
                 player.seekTo(seekTo)
-                player.play() // ФИКС: Играем сразу после перемотки
+
+                if (wasPlaying) {
+                    player.play() // Возвращаем игру, только если она была
+                }
+
+                // Шлем прогресс, чтобы TextView в активити обновился мгновенно
                 broadcastProgress()
+                // НИКАКИХ ручных updateNotification() здесь.
+                // Слушатель onIsPlayingChanged сам всё сделает, когда плеер будет готов.
             }
 
             ACTION_NEXT -> playNext()
@@ -150,12 +157,14 @@ class MusicService : Service() {
         return START_STICKY
     }
 
+    // ТВОЙ ОБНОВЛЕННЫЙ МЕТОД: Всегда скипает назад без задержки 5с
     private fun playPrevious() {
-        if (player.currentPosition > 5000) {
-            player.seekTo(0L)
+        val currentIndex = player.currentMediaItemIndex
+        if (currentIndex > 0) {
+            player.seekTo(currentIndex - 1, 0L)
         } else {
-            if (player.hasPreviousMediaItem()) player.seekToPrevious()
-            else player.seekTo(player.mediaItemCount - 1, 0L)
+            // Если первый трек — прыгаем в конец
+            player.seekTo(player.mediaItemCount - 1, 0L)
         }
         player.play()
     }
@@ -206,7 +215,7 @@ class MusicService : Service() {
         val title = if (idx in titles.indices) titles[idx] else "Music Player"
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play) // СТРОКА-СПАСИТЕЛЬНИЦА (теперь не вылетит)
+            .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pOpen)
             .setContentTitle(title)
             .setOngoing(player.isPlaying)
