@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
             val duration = intent?.getLongExtra(MusicService.EXTRA_DURATION, 0L) ?: 0L
             val isPlaying = intent?.getBooleanExtra("IS_PLAYING", false) ?: false
 
-            if (index == -1) {
+            if (index == -1 || title == "Nothing playing" || title == "Unknown") {
                 playerPanel.visibility = View.GONE
             } else {
                 playerPanel.visibility = View.VISIBLE
