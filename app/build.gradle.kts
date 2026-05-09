@@ -44,9 +44,9 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    implementation("com.google.android.exoplayer:exoplayer:2.19.1")
-    implementation("androidx.media:media:1.6.0")
-    implementation("com.google.android.exoplayer:extension-mediasession:2.19.1")
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-session:1.3.1")
+    implementation("androidx.media:media:1.7.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.4.0") // опционально, но полезно
     implementation("io.coil-kt.coil3:coil:3.4.0")
 }
