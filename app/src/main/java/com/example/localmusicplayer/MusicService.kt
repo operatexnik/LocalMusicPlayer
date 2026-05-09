@@ -111,6 +111,14 @@ class MusicService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // --- ПРАВКА 1: Гарантированный запуск уведомления, чтобы не было вылета RemoteServiceException ---
+        try {
+            startForeground(NOTIF_ID, buildNotification())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        // -------------------------------------------------------------------------------------------------
+
         when (intent?.action) {
             ACTION_PLAY_LIST -> {
                 val uris = intent.getStringArrayListExtra(EXTRA_URIS) ?: arrayListOf()
@@ -132,7 +140,8 @@ class MusicService : Service() {
                 }
 
                 saveCurrentIndex()
-                startForeground(NOTIF_ID, buildNotification())
+                // Заменил startForeground на updateNotification, так как мы уже вызвали его выше
+                updateNotification()
             }
 
             ACTION_TOGGLE -> {
@@ -295,7 +304,14 @@ class MusicService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
 
-        val artworkBitmap = android.graphics.BitmapFactory.decodeResource(resources, R.drawable.default_cover)
+        // --- ПРАВКА 2: Безопасная загрузка картинки, чтобы метод не крашился ---
+        val artworkBitmap = try {
+            android.graphics.BitmapFactory.decodeResource(resources, R.drawable.default_cover)
+        } catch (e: Exception) {
+            null
+        }
+        // -----------------------------------------------------------------------
+
         val idx = player.currentMediaItemIndex
         val title = if (idx in titles.indices) titles[idx] else "Track"
         val artist = "Local Artist"
@@ -324,8 +340,8 @@ class MusicService : Service() {
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
                     .setShowActionsInCompactView(0, 1, 2) // Prev, Play/Pause, Next
-                    // ФИКС ТУТ: Используем безопасный метод конвертации токена
-                    .setMediaSession(MediaSessionCompat.Token.fromToken(mediaSession.sessionCompatToken))
+                    // Убрали fromToken, передаем напрямую!
+                    .setMediaSession(mediaSession.sessionCompatToken as MediaSessionCompat.Token)
             )
             .build()
     }
