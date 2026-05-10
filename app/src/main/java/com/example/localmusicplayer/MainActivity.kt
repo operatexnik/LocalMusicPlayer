@@ -1,156 +1,33 @@
 package com.example.localmusicplayer
 
 import android.Manifest
-import android.content.BroadcastReceiver
-import android.content.ContentUris
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
-import android.widget.ListView
-import android.widget.SeekBar
-import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import android.view.View
-import android.widget.LinearLayout
-import android.widget.ImageButton
+import androidx.fragment.app.Fragment
+import androidx.viewpager2.adapter.FragmentStateAdapter
+import androidx.viewpager2.widget.ViewPager2
+import android.widget.Toast
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var adapter: TrackAdapter
-    private lateinit var txtNowPlaying: TextView
-    private lateinit var txtProgress: TextView
-    private lateinit var seekBar: SeekBar
-    private lateinit var btnPauseMini: ImageButton
-    private lateinit var playerPanel: LinearLayout
+    var tracksFragment: TracksFragment? = null
+    private var playlistsFragment: PlaylistsFragment? = null
 
-    private val tracks = mutableListOf<Track>()
-    private var currentTrackIndex = -1
-    private var isUserTracking = false
-    private var lastSeekTime = 0L
-    private var initialStateReceived = false
-
-    private val prefs by lazy { getSharedPreferences("player_prefs", MODE_PRIVATE) }
-
-    private val trackChangedReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                MusicService.ACTION_TRACK_CHANGED -> {
-                    val index = intent.getIntExtra(MusicService.EXTRA_CURRENT_INDEX, -1)
-                    val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: ""
-                    val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
-                    val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
-                    val isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
-
-                    currentTrackIndex = index
-                    adapter.currentIndex = index
-                    adapter.notifyDataSetChanged()
-
-                    if (index == -1) {
-                        playerPanel.visibility = View.GONE
-                        txtNowPlaying.text = ""
-                        txtProgress.text = ""
-                        seekBar.max = 0
-                        seekBar.progress = 0
-                        updatePauseButton(false)
-                    } else {
-                        playerPanel.visibility = View.VISIBLE
-                        txtNowPlaying.text = title
-                        if (!isUserTracking && duration > 0) {
-                            seekBar.max = duration.toInt()
-                            seekBar.progress = position.toInt()
-                            txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
-                        }
-                        updatePauseButton(true)
-                    }
-                }
-
-                MusicService.ACTION_PROGRESS -> {
-                    val index = intent.getIntExtra(MusicService.EXTRA_CURRENT_INDEX, -1)
-                    val title = intent.getStringExtra(MusicService.EXTRA_TITLE) ?: ""
-                    val position = intent.getLongExtra(MusicService.EXTRA_POSITION, 0L)
-                    val duration = intent.getLongExtra(MusicService.EXTRA_DURATION, 0L)
-                    val isPlaying = intent.getBooleanExtra("IS_PLAYING", false)
-
-                    if (index == -1) {
-                        playerPanel.visibility = View.GONE
-                        txtNowPlaying.text = ""
-                        txtProgress.text = ""
-                        seekBar.max = 0
-                        seekBar.progress = 0
-                    } else {
-                        playerPanel.visibility = View.VISIBLE
-                        txtNowPlaying.text = title
-                        if (!isUserTracking && System.currentTimeMillis() - lastSeekTime > 500 && duration > 0) {
-                            seekBar.max = duration.toInt()
-                            seekBar.progress = position.toInt()
-                            txtProgress.text = "${formatTime(position)} / ${formatTime(duration)}"
-                        }
-                        if (!initialStateReceived) {
-                            initialStateReceived = true
-                            updatePauseButton(isPlaying)
-                        }
-                    }
-                }
-            }
-        }
+    private val requestNotifPerm = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) Toast.makeText(this, "Без уведомлений шторки не будет 😅", Toast.LENGTH_SHORT).show()
     }
 
     private val requestStoragePerm = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) scanMusic()
-        else toast("Нужен доступ к музыке 🙃")
-    }
-
-    private val requestNotifPerm = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) toast("Без уведомлений шторки не будет 😅")
-    }
-
-    override fun onResume() {
-        initialStateReceived = false
-        super.onResume()
-
-        val filter = IntentFilter().apply {
-            addAction(MusicService.ACTION_TRACK_CHANGED)
-            addAction(MusicService.ACTION_PROGRESS)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(trackChangedReceiver, filter, RECEIVER_NOT_EXPORTED)
-        } else {
-            ContextCompat.registerReceiver(this, trackChangedReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        }
-
-        currentTrackIndex = prefs.getInt("current_index", -1)
-        adapter.currentIndex = currentTrackIndex
-        adapter.notifyDataSetChanged()
-
-        if (currentTrackIndex != -1) {
-            playerPanel.visibility = View.VISIBLE
-        } else {
-            playerPanel.visibility = View.GONE
-        }
-
-        requestPlayerState()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        try { unregisterReceiver(trackChangedReceiver) } catch (e: Exception) {}
-    }
-
-    private fun requestPlayerState() {
-        startService(Intent(this, MusicService::class.java).apply {
-            action = MusicService.ACTION_PROGRESS
-        })
+        if (granted) tracksFragment?.scanMusic()
+        else Toast.makeText(this, "Нужен доступ к музыке 🙃", Toast.LENGTH_SHORT).show()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -165,112 +42,20 @@ class MainActivity : AppCompatActivity() {
             window.setDecorFitsSystemWindows(false)
         }
 
-        val btnPrevMini = findViewById<ImageButton>(R.id.btnPrevMini)
-        btnPauseMini = findViewById(R.id.btnPauseMini)
-        val btnNextMini = findViewById<ImageButton>(R.id.btnNextMini)
+        // Создаём фрагменты
+        tracksFragment = TracksFragment()
+        playlistsFragment = PlaylistsFragment()
 
-        btnPrevMini.setOnClickListener {
-            updatePauseButton(true) // сразу показываем паузу
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_PREV))
-        }
-        btnPauseMini.setOnClickListener {
-            // toggle — смотрим на текущую иконку и меняем
-            val isCurrentlyPlaying = btnPauseMini.tag as? Boolean ?: true
-            updatePauseButton(!isCurrentlyPlaying)
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_TOGGLE))
-        }
-        btnNextMini.setOnClickListener {
-            updatePauseButton(true) // сразу показываем паузу
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_NEXT))
-        }
-
-        intent?.data?.let { uri ->
-            val name = getFileName(uri)
-            val i = Intent(this, MusicService::class.java).apply {
-                action = MusicService.ACTION_PLAY_LIST
-                putStringArrayListExtra(MusicService.EXTRA_URIS, arrayListOf(uri.toString()))
-                putStringArrayListExtra(MusicService.EXTRA_TITLES, arrayListOf(name ?: "Unknown"))
-                putExtra(MusicService.EXTRA_INDEX, 0)
+        val pager = findViewById<ViewPager2>(R.id.viewPager)
+        pager.adapter = object : FragmentStateAdapter(this) {
+            override fun getItemCount() = 2
+            override fun createFragment(position: Int): Fragment = when (position) {
+                0 -> tracksFragment!!
+                else -> playlistsFragment!!
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
-            else startService(i)
         }
 
-        val list = findViewById<ListView>(R.id.listTracks)
-        val btnRestore = findViewById<ImageButton>(R.id.btnRestore)
-        txtNowPlaying = findViewById(R.id.txtNowPlaying)
-        txtProgress = findViewById(R.id.txtProgress)
-        seekBar = findViewById(R.id.seekBar)
-        playerPanel = findViewById(R.id.playerPanel)
-
-        playerPanel.setOnTouchListener { _, _ -> true }
-
-        adapter = TrackAdapter(this, tracks)
-        list.adapter = adapter
-        currentTrackIndex = prefs.getInt("current_index", -1)
-        adapter.currentIndex = currentTrackIndex
-
-        btnRestore.setOnClickListener {
-            prefs.edit().remove("hidden_tracks").apply()
-            scanMusic()
-            toast("Все треки возвращены!")
-        }
-        btnRestore.setOnLongClickListener {
-            showRestoreDialog()
-            true
-        }
-
-        list.setOnItemClickListener { _, _, pos, _ ->
-            val t = tracks[pos]
-            currentTrackIndex = pos
-            adapter.currentIndex = pos
-            adapter.notifyDataSetChanged()
-
-            val uris = ArrayList(tracks.map { it.uri.toString() })
-            val titles = ArrayList(tracks.map { it.title.substringBeforeLast(".").replace("_", " ") })
-            val i = Intent(this, MusicService::class.java).apply {
-                action = MusicService.ACTION_PLAY_LIST
-                putStringArrayListExtra(MusicService.EXTRA_URIS, uris)
-                putStringArrayListExtra(MusicService.EXTRA_TITLES, titles)
-                putExtra(MusicService.EXTRA_INDEX, pos)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i)
-            else startService(i)
-            toast("▶ ${t.title}")
-        }
-
-        list.setOnItemLongClickListener { view, _, pos, _ ->
-            val track = tracks[pos]
-            val popup = android.widget.PopupMenu(this, view)
-            popup.menu.add("Удалить")
-            popup.setOnMenuItemClickListener {
-                hideTrack(track.id)
-                removeTrackFromList(track.id)
-                toast("Скрыто: ${track.title}")
-                true
-            }
-            popup.show()
-            true
-        }
-
-        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: SeekBar?, p: Int, fromUser: Boolean) {
-                if (fromUser) {
-                    txtProgress.text = "${formatTime(p.toLong())} / ${formatTime(s?.max?.toLong() ?: 0L)}"
-                }
-            }
-            override fun onStartTrackingTouch(s: SeekBar?) { isUserTracking = true }
-            override fun onStopTrackingTouch(s: SeekBar?) {
-                isUserTracking = false
-                lastSeekTime = System.currentTimeMillis()
-                val newPos = s?.progress?.toLong() ?: 0L
-                startService(Intent(this@MainActivity, MusicService::class.java).apply {
-                    action = MusicService.ACTION_SEEK
-                    putExtra(MusicService.EXTRA_SEEK_TO, newPos)
-                })
-            }
-        })
-
+        // Уведомления
         if (Build.VERSION.SDK_INT >= 33) {
             val perm = Manifest.permission.POST_NOTIFICATIONS
             if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
@@ -278,174 +63,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        ensureStoragePermissionThenScan()
-    }
+        // Хранилище
+        val storagePerm = if (Build.VERSION.SDK_INT >= 33)
+            Manifest.permission.READ_MEDIA_AUDIO
+        else
+            Manifest.permission.READ_EXTERNAL_STORAGE
 
-    private fun ensureStoragePermissionThenScan() {
-        val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO
-        else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) scanMusic()
-        else requestStoragePerm.launch(perm)
-    }
-
-    private fun scanMusic() {
-        val minBytes = 1_000_000L
-        tracks.clear()
-
-        val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
-        )
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.SIZE} >= ?"
-
-        contentResolver.query(collection, projection, selection, arrayOf(minBytes.toString()),
-            "${MediaStore.Audio.Media.DATE_ADDED} DESC")?.use { cursor ->
-
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-            val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-            val albumIdCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
-            val hidden = getHiddenTracks()
-
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                if (hidden.contains(id.toString())) continue
-                tracks.add(Track(
-                    id,
-                    cursor.getString(nameCol).substringBeforeLast("."),
-                    cursor.getString(artistCol) ?: "Unknown",
-                    ContentUris.withAppendedId(collection, id),
-                    cursor.getLong(durationCol),
-                    cursor.getLong(albumIdCol)
-                ))
-            }
+        if (ContextCompat.checkSelfPermission(this, storagePerm) != PackageManager.PERMISSION_GRANTED) {
+            requestStoragePerm.launch(storagePerm)
         }
-
-        currentTrackIndex = prefs.getInt("current_index", -1)
-        adapter.currentIndex = currentTrackIndex
-        adapter.notifyDataSetChanged()
-        toast("Нашёл треков: ${tracks.size}")
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-    }
-
-    fun removeTrackFromList(id: Long) {
-        val removedIndex = tracks.indexOfFirst { it.id == id }
-        if (removedIndex == -1) return
-        val isRemovingCurrent = (removedIndex == currentTrackIndex)
-        tracks.removeAt(removedIndex)
-        adapter.notifyDataSetChanged()
-
-        if (isRemovingCurrent) {
-            currentTrackIndex = -1
-            startService(Intent(this, MusicService::class.java).setAction(MusicService.ACTION_STOP))
-            playerPanel.visibility = View.GONE
-            return
-        }
-        if (removedIndex < currentTrackIndex) {
-            currentTrackIndex--
-            adapter.currentIndex = currentTrackIndex
-            adapter.notifyDataSetChanged()
-        }
-        refreshPlaylistKeepPosition()
-    }
-
-    private fun refreshPlaylistKeepPosition() {
-        if (tracks.isEmpty() || currentTrackIndex < 0) return
-        val uris = ArrayList(tracks.map { it.uri.toString() })
-        val titles = ArrayList(tracks.map { it.title.substringBeforeLast(".").replace("_", " ") })
-        val intent = Intent(this, MusicService::class.java).apply {
-            action = MusicService.ACTION_PLAY_LIST
-            putStringArrayListExtra(MusicService.EXTRA_URIS, uris)
-            putStringArrayListExtra(MusicService.EXTRA_TITLES, titles)
-            putExtra(MusicService.EXTRA_INDEX, currentTrackIndex)
-            putExtra("KEEP_POSITION", true)
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-        else startService(intent)
-    }
-
-    private fun formatTime(ms: Long): String {
-        val s = (ms / 1000).coerceAtLeast(0)
-        return String.format("%d:%02d", s / 60, s % 60)
-    }
-
-    private fun getHiddenTracks(): MutableSet<String> =
-        prefs.getStringSet("hidden_tracks", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
-
-    fun hideTrack(id: Long) {
-        val set = getHiddenTracks()
-        set.add(id.toString())
-        prefs.edit().putStringSet("hidden_tracks", set).apply()
-    }
-
-    private fun getFileName(uri: android.net.Uri): String? {
-        var name: String? = null
-        if (uri.scheme == "content") {
-            contentResolver.query(uri, null, null, null, null)?.use {
-                val index = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                if (it.moveToFirst() && index >= 0) name = it.getString(index)
-            }
-        }
-        return name ?: uri.lastPathSegment
-    }
-
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
-
-    private fun showRestoreDialog() {
-        val hiddenIds = getHiddenTracks()
-        if (hiddenIds.isEmpty()) { toast("Blacklist пуст"); return }
-
-        val namesMap = mutableMapOf<String, String>()
-        contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DISPLAY_NAME),
-            null, null, null
-        )?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol).toString()
-                if (hiddenIds.contains(id)) {
-                    namesMap[id] = cursor.getString(nameCol).substringBeforeLast(".").replace("_", " ")
-                }
-            }
-        }
-
-        val idsArray = namesMap.keys.toTypedArray()
-        val namesArray = namesMap.values.toTypedArray()
-        val selectedIds = mutableListOf<String>()
-
-        android.app.AlertDialog.Builder(this)
-            .setTitle("Восстановить треки")
-            .setMultiChoiceItems(namesArray, null) { _, which, isChecked ->
-                if (isChecked) selectedIds.add(idsArray[which])
-                else selectedIds.remove(idsArray[which])
-            }
-            .setPositiveButton("Восстановить") { _, _ ->
-                val currentHidden = getHiddenTracks()
-                currentHidden.removeAll(selectedIds.toSet())
-                prefs.edit().putStringSet("hidden_tracks", currentHidden).apply()
-                scanMusic()
-            }
-            .setNegativeButton("Отмена", null)
-            .show()
-    }
-
-    private fun updatePauseButton(isPlaying: Boolean) {
-        if (!::btnPauseMini.isInitialized) return
-        btnPauseMini.tag = isPlaying
-        btnPauseMini.setImageResource(
-            if (isPlaying) android.R.drawable.ic_media_pause
-            else android.R.drawable.ic_media_play
-        )
     }
 }
