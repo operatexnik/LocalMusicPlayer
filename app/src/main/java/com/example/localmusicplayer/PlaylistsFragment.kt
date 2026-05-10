@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -29,31 +28,16 @@ class PlaylistsFragment : Fragment() {
     private lateinit var adapter: PlaylistAdapter
     private val playlists = mutableListOf<Playlist>()
 
-    // Для выбора обложки при создании/редактировании
     private var pendingPlaylistId: Long? = null
-    private var pendingPlaylistName: String? = null
+    private var pendingCoverCallback: ((String) -> Unit)? = null
 
     private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@registerForActivityResult
-        val name = pendingPlaylistName ?: return@registerForActivityResult
-
         lifecycleScope.launch {
             val savedPath = saveImageLocally(uri)
-            val db = AppDatabase.get(requireContext())
-
-            val pid = pendingPlaylistId
-            if (pid == null) {
-                // Создаём новый плейлист с обложкой
-                db.playlistDao().insertPlaylist(Playlist(name = name, coverPath = savedPath))
-            } else {
-                // Обновляем обложку существующего
-                val existing = playlists.find { it.id == pid } ?: return@launch
-                db.playlistDao().updatePlaylist(existing.copy(coverPath = savedPath))
-            }
-
+            pendingCoverCallback?.invoke(savedPath)
+            pendingCoverCallback = null
             pendingPlaylistId = null
-            pendingPlaylistName = null
-            loadPlaylists()
         }
     }
 
@@ -97,34 +81,38 @@ class PlaylistsFragment : Fragment() {
     }
 
     private fun showCreatePlaylistDialog() {
-        val input = EditText(requireContext()).apply {
-            hint = "Название плейлиста"
-            setPadding(48, 24, 48, 24)
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_create_playlist, null)
+        val coverView = dialogView.findViewById<ImageView>(R.id.imgNewPlaylistCover)
+        val nameInput = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.etPlaylistName)
+
+        var selectedCoverPath: String? = null
+
+        coverView.setOnClickListener {
+            pendingCoverCallback = { path ->
+                selectedCoverPath = path
+                coverView.load(File(path)) {
+                    placeholder(R.drawable.ic_notification)
+                }
+                // Убираем паддинг когда есть обложка
+                coverView.setPadding(0, 0, 0, 0)
+            }
+            pickImage.launch("image/*")
         }
 
         android.app.AlertDialog.Builder(requireContext())
             .setTitle("Новый плейлист")
-            .setView(input)
+            .setView(dialogView)
             .setPositiveButton("Создать") { _, _ ->
-                val name = input.text.toString().trim()
-                if (name.isEmpty()) { toast("Введи название"); return@setPositiveButton }
-
-                android.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Обложка плейлиста")
-                    .setMessage("Выбрать из галереи?")
-                    .setPositiveButton("Выбрать") { _, _ ->
-                        pendingPlaylistName = name
-                        pendingPlaylistId = null
-                        pickImage.launch("image/*")
+                val name = nameInput?.text?.toString()?.trim() ?: ""
+                if (name.isNotEmpty()) {
+                    lifecycleScope.launch {
+                        AppDatabase.get(requireContext()).playlistDao()
+                            .insertPlaylist(Playlist(name = name, coverPath = selectedCoverPath))
+                        loadPlaylists()
                     }
-                    .setNegativeButton("Пропустить") { _, _ ->
-                        lifecycleScope.launch {
-                            AppDatabase.get(requireContext()).playlistDao()
-                                .insertPlaylist(Playlist(name = name))
-                            loadPlaylists()
-                        }
-                    }
-                    .show()
+                } else {
+                    toast("Введи название")
+                }
             }
             .setNegativeButton("Отмена", null)
             .show()
@@ -138,8 +126,13 @@ class PlaylistsFragment : Fragment() {
                 when (which) {
                     0 -> showRenameDialog(playlist)
                     1 -> {
-                        pendingPlaylistId = playlist.id
-                        pendingPlaylistName = playlist.name
+                        pendingCoverCallback = { path ->
+                            lifecycleScope.launch {
+                                AppDatabase.get(requireContext()).playlistDao()
+                                    .updatePlaylist(playlist.copy(coverPath = path))
+                                loadPlaylists()
+                            }
+                        }
                         pickImage.launch("image/*")
                     }
                     2 -> showDeleteDialog(playlist)
@@ -149,7 +142,7 @@ class PlaylistsFragment : Fragment() {
     }
 
     private fun showRenameDialog(playlist: Playlist) {
-        val input = EditText(requireContext()).apply {
+        val input = android.widget.EditText(requireContext()).apply {
             setText(playlist.name)
             setPadding(48, 24, 48, 24)
         }
@@ -172,7 +165,7 @@ class PlaylistsFragment : Fragment() {
     private fun showDeleteDialog(playlist: Playlist) {
         android.app.AlertDialog.Builder(requireContext())
             .setTitle("Удалить «${playlist.name}»?")
-            .setMessage("Треки из плейлиста не удалятся с устройства")
+            .setMessage("Треки с устройства не удалятся")
             .setPositiveButton("Удалить") { _, _ ->
                 lifecycleScope.launch {
                     AppDatabase.get(requireContext()).playlistDao().deletePlaylist(playlist)
@@ -206,7 +199,6 @@ class PlaylistsFragment : Fragment() {
     private fun toast(s: String) = Toast.makeText(requireContext(), s, Toast.LENGTH_SHORT).show()
 }
 
-// --- Адаптер плейлистов ---
 class PlaylistAdapter(
     private val items: List<Playlist>,
     private val onClick: (Playlist) -> Unit,
@@ -228,20 +220,22 @@ class PlaylistAdapter(
         val playlist = items[position]
         holder.name.text = playlist.name
 
-        // Обложка
         if (playlist.coverPath != null) {
             holder.img.load(File(playlist.coverPath)) {
                 placeholder(R.drawable.ic_notification)
                 error(R.drawable.ic_notification)
             }
+            holder.img.setPadding(0, 0, 0, 0)
         } else {
             holder.img.setImageResource(R.drawable.ic_notification)
+            val p = holder.img.context.resources.getDimensionPixelSize(
+                android.R.dimen.app_icon_size
+            ) / 4
+            holder.img.setPadding(p, p, p, p)
         }
 
-        // Количество треков
-        val ctx = holder.itemView.context
         androidx.lifecycle.ProcessLifecycleOwner.get().lifecycleScope.launch {
-            val count = AppDatabase.get(ctx).playlistDao().getTrackCount(playlist.id)
+            val count = AppDatabase.get(holder.itemView.context).playlistDao().getTrackCount(playlist.id)
             withContext(Dispatchers.Main) {
                 holder.count.text = "$count треков"
             }

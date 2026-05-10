@@ -22,7 +22,6 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class TracksFragment : Fragment() {
 
@@ -150,10 +149,12 @@ class TracksFragment : Fragment() {
             true
         }
 
+        // Обычный клик — играть
         list.setOnItemClickListener { _, _, pos, _ ->
             playTrackAt(pos)
         }
 
+        // Долгий клик — меню
         list.setOnItemLongClickListener { v, _, pos, _ ->
             showTrackMenu(v, pos)
             true
@@ -237,45 +238,18 @@ class TracksFragment : Fragment() {
                     removeTrackFromList(track.id)
                     toast("Скрыто: ${track.title}")
                 }
-                "Добавить в плейлист" -> showAddToPlaylistDialog(track)
+                "Добавить в плейлист" -> {
+                    AddToPlaylistBottomSheet.newInstance(track.id) {
+                        // Обновляем обложки после добавления
+                        lifecycleScope.launch {
+                            adapter.refreshCovers(AppDatabase.get(requireContext()).playlistDao())
+                        }
+                    }.show(parentFragmentManager, "add_to_playlist")
+                }
             }
             true
         }
         popup.show()
-    }
-
-    private fun showAddToPlaylistDialog(track: Track) {
-        lifecycleScope.launch {
-            val db = AppDatabase.get(requireContext())
-            val playlists = db.playlistDao().getAllPlaylists()
-
-            if (playlists.isEmpty()) {
-                toast("Нет плейлистов. Создай сначала!")
-                return@launch
-            }
-
-            val names = playlists.map { it.name }.toTypedArray()
-
-            withContext(Dispatchers.Main) {
-                android.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Добавить в плейлист")
-                    .setItems(names) { _, which ->
-                        val playlist = playlists[which]
-                        lifecycleScope.launch {
-                            db.playlistDao().addTrackToPlaylist(
-                                PlaylistTrack(playlistId = playlist.id, trackId = track.id)
-                            )
-                            withContext(Dispatchers.Main) {
-                                toast("Добавлено в «${playlist.name}»")
-                                // Обновляем обложки треков
-                                adapter.refreshCovers(db.playlistDao())
-                            }
-                        }
-                    }
-                    .setNegativeButton("Отмена", null)
-                    .show()
-            }
-        }
     }
 
     fun scanMusic() {
@@ -322,7 +296,6 @@ class TracksFragment : Fragment() {
         adapter.currentIndex = currentTrackIndex
         adapter.notifyDataSetChanged()
 
-        // Загружаем обложки плейлистов для треков
         lifecycleScope.launch {
             adapter.refreshCovers(AppDatabase.get(requireContext()).playlistDao())
         }
