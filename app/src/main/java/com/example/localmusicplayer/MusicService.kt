@@ -339,7 +339,7 @@ class MusicService : Service() {
             .addAction(NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopIntent))
             .setStyle(
                 androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2) // Prev, Play/Pause, Next
+                    .setShowActionsInCompactView() // Prev, Play/Pause, Next
                     // Убрали fromToken, передаем напрямую!
                     .setMediaSession(mediaSession.sessionCompatToken as MediaSessionCompat.Token)
             )
