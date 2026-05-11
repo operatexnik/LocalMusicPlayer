@@ -225,30 +225,50 @@ class TracksFragment : Fragment() {
         toast("▶ ${tracks[pos].title}")
     }
 
-    private fun showTrackMenu(view: View, pos: Int) {
+    private fun showTrackMenu(anchor: View, pos: Int) {
         val track = tracks[pos]
-        val popup = android.widget.PopupMenu(requireContext(), view)
-        popup.menu.add("Скрыть")
-        popup.menu.add("Добавить в плейлист")
-        popup.setOnMenuItemClickListener { item ->
-            when (item.title) {
-                "Скрыть" -> {
-                    hideTrack(track.id)
-                    removeTrackFromList(track.id)
-                    toast("Скрыто: ${track.title}")
-                }
-                "Добавить в плейлист" -> {
-                    AddToPlaylistBottomSheet.newInstance(track.id) {
-                        // Обновляем обложки после добавления
-                        lifecycleScope.launch {
-                            adapter.refreshCovers(AppDatabase.get(requireContext()).playlistDao())
-                        }
-                    }.show(parentFragmentManager, "add_to_playlist")
-                }
-            }
+
+        val popupView = LayoutInflater.from(requireContext())
+            .inflate(R.layout.popup_track_menu, null)
+
+        val popup = android.widget.PopupWindow(
+            popupView,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
             true
+        )
+
+        // Обработка кликов по пунктам меню
+        popupView.findViewById<TextView>(R.id.menu_add_playlist).setOnClickListener {
+            AddToPlaylistBottomSheet.newInstance(track.id) {
+                lifecycleScope.launch {
+                    adapter.refreshCovers(AppDatabase.get(requireContext()).playlistDao())
+                }
+            }.show(parentFragmentManager, "add_to_playlist")
+            popup.dismiss()
         }
-        popup.show()
+
+        popupView.findViewById<TextView>(R.id.menu_hide).setOnClickListener {
+            hideTrack(track.id)
+            removeTrackFromList(track.id)
+            toast("Скрыто: ${track.title}")
+            popup.dismiss()
+        }
+
+        popup.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        popup.isOutsideTouchable = true
+        popup.isFocusable = true
+        popup.elevation = 12f
+
+        // === Главный фикс позиционирования ===
+        // Показываем меню справа от элемента
+        val location = IntArray(2)
+        anchor.getLocationInWindow(location)
+
+        val x = location[0] + anchor.width - 40   // чуть левее правого края
+        val y = location[1] + (anchor.height / 2) - 60  // по центру элемента по высоте
+
+        popup.showAtLocation(anchor.rootView, android.view.Gravity.NO_GRAVITY, x, y)
     }
 
     fun scanMusic() {
