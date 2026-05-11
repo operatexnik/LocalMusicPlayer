@@ -264,8 +264,38 @@ class TracksFragment : Fragment() {
         popup.elevation = 16f
         popup.animationStyle = android.R.style.Animation_Dialog
 
-        // Простой и надёжный способ — показать как выпадающее меню
-        popup.showAsDropDown(anchor, 0, 0)
+        // Ждём отрисовки и вычисляем позицию
+        anchor.post {
+            // Измеряем popup
+            popupView.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED),
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED)
+            )
+            val popupHeight = popupView.measuredHeight
+            val popupWidth = popupView.measuredWidth
+
+            // Получаем координаты трека
+            val anchorLocation = IntArray(2)
+            anchor.getLocationOnScreen(anchorLocation)
+            val anchorY = anchorLocation[1]
+            val anchorHeight = anchor.height
+
+            // Высота экрана
+            val screenHeight = resources.displayMetrics.heightPixels
+
+            // Проверяем, хватит ли места снизу
+            val spaceBelow = screenHeight - (anchorY + anchorHeight)
+            val showAbove = spaceBelow < popupHeight + 1 // 50px запас
+
+            if (showAbove) {
+                // Показываем над треком
+                val yOffset = -popupHeight - anchorHeight
+                popup.showAsDropDown(anchor, 0, yOffset)
+            } else {
+                // Показываем под треком
+                popup.showAsDropDown(anchor, 0, 0)
+            }
+        }
     }
 
     fun scanMusic() {
