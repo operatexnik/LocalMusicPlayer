@@ -63,14 +63,6 @@ class TrackAdapter(
 
         loadCoverForTrack(imgAlbumArt, track)
 
-        rootTrackItem.setOnClickListener {
-            (parent as? android.widget.ListView)?.performItemClick(view, position, getItemId(position))
-        }
-        rootTrackItem.setOnLongClickListener {
-            showPopupMenu(it, track)
-            true
-        }
-
         return view
     }
 
@@ -163,19 +155,5 @@ class TrackAdapter(
     private fun formatDuration(durationMs: Long): String {
         val totalSeconds = durationMs / 1000
         return String.format("%d:%02d", totalSeconds / 60, totalSeconds % 60)
-    }
-
-    private fun showPopupMenu(view: View, track: Track) {
-        val popup = android.widget.PopupMenu(context, view)
-        popup.menu.add("Удалить")
-        popup.setOnMenuItemClickListener {
-            if (it.title == "Удалить" && context is MainActivity) {
-                // MainActivity теперь делегирует во фрагмент
-                context.tracksFragment?.hideTrack(track.id)
-                context.tracksFragment?.removeTrackFromList(track.id)
-            }
-            true
-        }
-        popup.show()
     }
 }

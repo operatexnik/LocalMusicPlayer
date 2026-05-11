@@ -4,4 +4,7 @@
         <item name="android:navigationBarColor">@android:color/black</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
+    <style name="BottomSheetStyle" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="android:windowIsFloating">false</item>
+    </style>
 </resources>

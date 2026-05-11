@@ -60,16 +60,16 @@ class AddToPlaylistBottomSheet : BottomSheetDialogFragment() {
         }
     }
 
-    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        return BottomSheetDialog(requireContext(), R.style.BottomSheetStyle)
-    }
-
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return inflater.inflate(R.layout.bottom_sheet_add_to_playlist, container, false)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        (view.parent as? View)?.let {
+            it.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+        }
 
         val recycler = view.findViewById<RecyclerView>(R.id.recyclerPlaylistsSheet)
         recycler.layoutManager = LinearLayoutManager(requireContext())
