@@ -154,8 +154,11 @@ class TracksFragment : Fragment() {
         }
 
         // Долгий клик — меню
-        list.setOnItemLongClickListener { v, _, pos, _ ->
-            showTrackMenu(v, pos)
+        list.setOnItemLongClickListener { parent, view, pos, id ->
+            // view может быть не корневым элементом из-за оптимизаций ListView
+            // Поэтому используем parent.getChildAt(pos - list.firstVisiblePosition) для точного якоря
+            val anchor = parent.getChildAt(pos - list.firstVisiblePosition) ?: view
+            showTrackMenu(anchor, pos)
             true
         }
 
@@ -238,7 +241,7 @@ class TracksFragment : Fragment() {
             true
         )
 
-        // Обработка кликов по пунктам меню
+        // Кнопки
         popupView.findViewById<TextView>(R.id.menu_add_playlist).setOnClickListener {
             AddToPlaylistBottomSheet.newInstance(track.id) {
                 lifecycleScope.launch {
@@ -258,17 +261,11 @@ class TracksFragment : Fragment() {
         popup.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
         popup.isOutsideTouchable = true
         popup.isFocusable = true
-        popup.elevation = 12f
+        popup.elevation = 16f
+        popup.animationStyle = android.R.style.Animation_Dialog
 
-        // === Главный фикс позиционирования ===
-        // Показываем меню справа от элемента
-        val location = IntArray(2)
-        anchor.getLocationInWindow(location)
-
-        val x = location[0] + anchor.width - 40   // чуть левее правого края
-        val y = location[1] + (anchor.height / 2) - 60  // по центру элемента по высоте
-
-        popup.showAtLocation(anchor.rootView, android.view.Gravity.NO_GRAVITY, x, y)
+        // Простой и надёжный способ — показать как выпадающее меню
+        popup.showAsDropDown(anchor, 0, 0)
     }
 
     fun scanMusic() {
