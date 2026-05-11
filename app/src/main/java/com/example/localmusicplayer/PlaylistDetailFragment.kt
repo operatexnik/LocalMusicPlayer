@@ -36,7 +36,11 @@ class PlaylistDetailFragment : Fragment() {
     private val tracks = mutableListOf<Track>()
     private lateinit var adapter: TrackAdapter
 
-    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
         return inflater.inflate(R.layout.fragment_playlist_detail, container, false)
     }
 
@@ -86,11 +90,13 @@ class PlaylistDetailFragment : Fragment() {
                 withContext(Dispatchers.Main) {
                     tracks.clear()
                     adapter.notifyDataSetChanged()
+                    // Показываем заглушку
+                    view?.findViewById<TextView>(R.id.txtEmpty)?.visibility = View.VISIBLE
+                    view?.findViewById<ListView>(R.id.listPlaylistTracks)?.visibility = View.GONE
                 }
                 return@launch
             }
 
-            // Загружаем треки из MediaStore по ID
             val foundTracks = mutableListOf<Track>()
             val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             val projection = arrayOf(
@@ -115,25 +121,29 @@ class PlaylistDetailFragment : Fragment() {
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
                     if (id in idSet) {
-                        foundTracks.add(Track(
-                            id,
-                            cursor.getString(nameCol).substringBeforeLast("."),
-                            cursor.getString(artistCol) ?: "Unknown",
-                            ContentUris.withAppendedId(collection, id),
-                            cursor.getLong(durCol),
-                            cursor.getLong(albCol)
-                        ))
+                        foundTracks.add(
+                            Track(
+                                id,
+                                cursor.getString(nameCol).substringBeforeLast("."),
+                                cursor.getString(artistCol) ?: "Unknown",
+                                ContentUris.withAppendedId(collection, id),
+                                cursor.getLong(durCol),
+                                cursor.getLong(albCol)
+                            )
+                        )
                     }
                 }
             }
 
-            // Сортируем в том же порядке что добавляли
             val sorted = trackIds.mapNotNull { id -> foundTracks.find { it.id == id } }
 
             withContext(Dispatchers.Main) {
                 tracks.clear()
                 tracks.addAll(sorted)
                 adapter.notifyDataSetChanged()
+                // Показываем список
+                view?.findViewById<TextView>(R.id.txtEmpty)?.visibility = View.GONE
+                view?.findViewById<ListView>(R.id.listPlaylistTracks)?.visibility = View.VISIBLE
             }
         }
     }
