@@ -81,8 +81,8 @@ class TrackAdapter(
         if (coverPath != null) {
             imageView.load(File(coverPath)) {
                 crossfade(300)
-                placeholder(R.drawable.default_cover)
-                error(R.drawable.default_cover)
+                placeholder(R.drawable.ic_notification)
+                error(R.drawable.ic_notification)
             }
         } else {
             imageView.setImageResource(R.drawable.ic_notification)
@@ -101,8 +101,8 @@ class TrackAdapter(
 
         imageView.load(albumUri) {
             crossfade(200)
-            placeholder(R.drawable.default_cover)
-            error(R.drawable.default_cover)
+            placeholder(R.drawable.ic_notification)
+            error(R.drawable.ic_notification)
             size(128)
         }
     }
