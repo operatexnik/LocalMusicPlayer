@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import java.text.Normalizer
 
 class TracksFragment : Fragment() {
 
@@ -31,7 +32,13 @@ class TracksFragment : Fragment() {
     private lateinit var btnPauseMini: ImageButton
     private lateinit var playerPanel: LinearLayout
 
-    val tracks = mutableListOf<Track>()
+    private lateinit var editSearch: android.widget.EditText
+    private lateinit var btnSearchAction: ImageButton
+    private lateinit var btnRestore: ImageButton
+    private var isSearchOpen = false
+    private val allTracks = mutableListOf<Track>() // Тут будут ВООБЩЕ ВСЕ треки
+
+    val tracks = mutableListOf<Track>() // Тут будут только ТЕ, ЧТО ВИДНО (после поиска)
     private var currentTrackIndex = -1
     private var isUserTracking = false
     private var lastSeekTime = 0L
@@ -116,48 +123,48 @@ class TracksFragment : Fragment() {
         playerPanel = view.findViewById(R.id.playerPanel)
         btnPauseMini = view.findViewById(R.id.btnPauseMini)
 
+        // Инициализируем поиск
+        editSearch = view.findViewById(R.id.editSearch)
+        btnSearchAction = view.findViewById(R.id.btnSearchAction)
+        btnRestore = view.findViewById(R.id.btnRestore)
+
         playerPanel.setOnTouchListener { _, _ -> true }
 
         adapter = TrackAdapter(requireContext(), tracks)
         list.adapter = adapter
 
-        currentTrackIndex = prefs.getInt("current_index", -1)
-        adapter.currentIndex = currentTrackIndex
+        btnSearchAction.setOnClickListener {
+            if (!isSearchOpen) openSearch() else closeSearch()
+        }
+
+        editSearch.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                filterTracks(s.toString())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        })
 
         view.findViewById<ImageButton>(R.id.btnPrevMini).setOnClickListener {
-            updatePauseButton(true)
             requireContext().startService(Intent(requireContext(), MusicService::class.java).setAction(MusicService.ACTION_PREV))
         }
         btnPauseMini.setOnClickListener {
             val isCurrentlyPlaying = btnPauseMini.tag as? Boolean ?: true
-            updatePauseButton(!isCurrentlyPlaying)
             requireContext().startService(Intent(requireContext(), MusicService::class.java).setAction(MusicService.ACTION_TOGGLE))
         }
         view.findViewById<ImageButton>(R.id.btnNextMini).setOnClickListener {
-            updatePauseButton(true)
             requireContext().startService(Intent(requireContext(), MusicService::class.java).setAction(MusicService.ACTION_NEXT))
         }
 
-        view.findViewById<ImageButton>(R.id.btnRestore).setOnClickListener {
+        btnRestore.setOnClickListener {
             prefs.edit().remove("hidden_tracks").apply()
             scanMusic()
             toast("Все треки возвращены!")
         }
-        view.findViewById<ImageButton>(R.id.btnRestore).setOnLongClickListener {
-            showRestoreDialog()
-            true
-        }
 
-        // Обычный клик — играть
-        list.setOnItemClickListener { _, _, pos, _ ->
-            playTrackAt(pos)
-        }
-
-        // Долгий клик — меню
-        list.setOnItemLongClickListener { parent, view, pos, id ->
-            // view может быть не корневым элементом из-за оптимизаций ListView
-            // Поэтому используем parent.getChildAt(pos - list.firstVisiblePosition) для точного якоря
-            val anchor = parent.getChildAt(pos - list.firstVisiblePosition) ?: view
+        list.setOnItemClickListener { _, _, pos, _ -> playTrackAt(pos) }
+        list.setOnItemLongClickListener { parent, v, pos, _ ->
+            val anchor = parent.getChildAt(pos - list.firstVisiblePosition) ?: v
             showTrackMenu(anchor, pos)
             true
         }
@@ -300,7 +307,7 @@ class TracksFragment : Fragment() {
 
     fun scanMusic() {
         val minBytes = 1_000_000L
-        tracks.clear()
+        allTracks.clear() // Чистим основной архив
 
         val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
@@ -327,7 +334,7 @@ class TracksFragment : Fragment() {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 if (hidden.contains(id.toString())) continue
-                tracks.add(Track(
+                allTracks.add(Track(
                     id,
                     cursor.getString(nameCol).substringBeforeLast("."),
                     cursor.getString(artistCol) ?: "Unknown",
@@ -338,15 +345,12 @@ class TracksFragment : Fragment() {
             }
         }
 
-        currentTrackIndex = prefs.getInt("current_index", -1)
-        adapter.currentIndex = currentTrackIndex
+        // ВАЖНО: Копируем данные в видимый список
+        tracks.clear()
+        tracks.addAll(allTracks)
+
         adapter.notifyDataSetChanged()
-
-        lifecycleScope.launch {
-            adapter.refreshCovers(AppDatabase.get(requireContext()).playlistDao())
-        }
-
-        toast("Нашёл треков: ${tracks.size}")
+        toast("Найдено: ${allTracks.size}")
     }
 
     fun removeTrackFromList(id: Long) {
@@ -446,6 +450,59 @@ class TracksFragment : Fragment() {
             if (isPlaying) android.R.drawable.ic_media_pause
             else android.R.drawable.ic_media_play
         )
+    }
+
+    private fun openSearch() {
+        isSearchOpen = true
+
+        // Скрываем кнопку восстановления, чтобы не мешалась
+        btnRestore.visibility = View.GONE
+
+        editSearch.visibility = View.VISIBLE
+        editSearch.requestFocus()
+
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.showSoftInput(editSearch, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+
+        btnSearchAction.setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
+    }
+
+    private fun closeSearch() {
+        isSearchOpen = false
+        editSearch.text.clear()
+        editSearch.visibility = View.GONE
+
+        // Возвращаем кнопку восстановления на место
+        btnRestore.visibility = View.VISIBLE
+
+        btnSearchAction.setImageResource(android.R.drawable.ic_menu_search)
+
+        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+        imm.hideSoftInputFromWindow(editSearch.windowToken, 0)
+
+        tracks.clear()
+        tracks.addAll(allTracks)
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun filterTracks(query: String) {
+        // 1. Чистим запрос: убираем пробелы и приводим к одному виду Unicode (NFC)
+        val rawQuery = query.trim().lowercase()
+        val searchText = Normalizer.normalize(rawQuery, Normalizer.Form.NFC)
+
+        val filtered = if (searchText.isEmpty()) {
+            allTracks.toList()
+        } else {
+            allTracks.filter { track ->
+                // 2. Название трека тоже принудительно нормализуем к NFC
+                val normalizedTitle = Normalizer.normalize(track.title.lowercase(), Normalizer.Form.NFC)
+                normalizedTitle.contains(searchText)
+            }
+        }
+
+        tracks.clear()
+        tracks.addAll(filtered)
+        adapter.notifyDataSetChanged()
     }
 
     private fun toast(s: String) = Toast.makeText(requireContext(), s, Toast.LENGTH_SHORT).show()
